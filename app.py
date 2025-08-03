@@ -98,7 +98,6 @@ def clean_text_for_pdf(text: str) -> str:
     return ''.join(c if 32 <= ord(c) <= 126 else ' ' for c in text)
 
 def generate_report_pdf(summary: str, findings: list):
-def generate_report_pdf(summary: str, findings: list):
     from fpdf import FPDF
     from datetime import datetime
 
