@@ -6,6 +6,7 @@ import fitz  # PyMuPDF
 from docx import Document
 import pytesseract
 import numpy as np
+import re
 
 # -----------------------------
 # Services (Embedded for HF)
@@ -19,7 +20,7 @@ def extract_text_from_pdf(file_bytes):
         for page in doc:
             text += page.get_text()
         return text
-    except Exception as e:
+    except Exception:
         return ""
 
 def extract_text_with_ocr(file_bytes):
@@ -35,11 +36,27 @@ def extract_text_with_ocr(file_bytes):
     except Exception as e:
         return f"OCR failed: {str(e)}"
 
+def extract_text_from_file(file_bytes, file_type):
+    try:
+        if file_type == "pdf":
+            text = extract_text_from_pdf(file_bytes)
+            if len(text.strip()) < 50:
+                text = extract_text_with_ocr(file_bytes)
+        elif file_type == "docx":
+            doc_stream = BytesIO(file_bytes)
+            doc = Document(doc_stream)
+            text = "\n".join([p.text for p in doc.paragraphs if p.text])
+        else:
+            text = ""
+        return text
+    except Exception as e:
+        return f"Text extraction failed: {e}"
+
 def summarize_text(text: str, max_length=300, min_length=100):
     if len(text.split()) < 50:
         return "Text too short to summarize."
     try:
-        # Simulate BART (replace with real pipeline in full setup)
+        # Simulate BART (replace with real summarizer when deploying)
         sentences = text.split('. ')
         summary = '. '.join(sentences[:4]) + '...'
         return summary if len(summary) > 20 else "Summary could not be generated."
@@ -63,7 +80,7 @@ def analyze_contract_text(text: str):
         line_lower = line.lower()
         for pattern, issue, risk, suggestion in patterns:
             if st.session_state.get("debug"): print(pattern, line_lower)
-            if np.any([re.search(p, line_lower) for p in [pattern]]):
+            if re.search(pattern, line_lower):
                 findings.append({
                     "line": i + 1,
                     "text": line.strip(),
@@ -136,6 +153,10 @@ st.title("💼 LegalEase AI — Your Legal Assistant")
 st.markdown("Powered by AI • For Ethiopian Law • Not Legal Advice")
 st.caption("⚠️ This tool does not provide legal advice. Always consult a licensed attorney.")
 
+# Sidebar - Debug
+with st.sidebar:
+    st.checkbox("🔧 Debug Mode", key="debug")
+
 # Tabs
 tab1, tab2, tab3 = st.tabs(["🗨️ Ask a Question", "📄 Summarize Document", "🔍 Analyze Risks"])
 
@@ -178,32 +199,21 @@ with tab2:
     if uploaded_file:
         with st.spinner("🔍 Extracting text..."):
             file_bytes = uploaded_file.read()
-            text = ""
+            file_type = "pdf" if uploaded_file.name.endswith(".pdf") else "docx"
+            text = extract_text_from_file(file_bytes, file_type)
 
-            try:
-                if uploaded_file.name.endswith(".pdf"):
-                    text = extract_text_from_pdf(file_bytes)
-                    if len(text.strip()) < 50:
-                        text = extract_text_with_ocr(file_bytes)
-                elif uploaded_file.name.endswith(".docx"):
-                    doc_stream = BytesIO(file_bytes)
-                    doc = Document(doc_stream)
-                    text = "\n".join([p.text for p in doc.paragraphs if p.text])
-            except Exception as e:
-                st.error(f"Failed to process file: {e}")
+        if len(text.strip()) < 50:
+            st.warning("⚠️ Could not extract enough text. Is the file scanned or encrypted?")
+        else:
+            st.success("✅ Text extracted!")
+            with st.expander("📄 Extracted Text (first 500 chars)"):
+                st.write(text[:500] + "...")
 
-            if len(text.strip()) < 50:
-                st.warning("⚠️ Could not extract enough text. Is the file scanned or encrypted?")
-            else:
-                st.success("✅ Text extracted!")
-                with st.expander("📄 Extracted Text (first 500 chars)"):
-                    st.write(text[:500] + "...")
+            with st.spinner("🧠 Generating summary..."):
+                summary = summarize_text(text)
 
-                with st.spinner("🧠 Generating summary..."):
-                    summary = summarize_text(text)
-
-                st.markdown("### 📝 Summary")
-                st.write(summary)
+            st.markdown("### 📝 Summary")
+            st.write(summary)
 
 # -----------------------------
 # TAB 3: Risk Analyzer
@@ -215,58 +225,43 @@ with tab3:
     if uploaded_file:
         with st.spinner("🔍 Scanning for risks..."):
             file_bytes = uploaded_file.read()
-            text = ""
+            file_type = "pdf" if uploaded_file.name.endswith(".pdf") else "docx"
+            text = extract_text_from_file(file_bytes, file_type)
 
+        if len(text.strip()) < 50:
+            st.warning("⚠️ Not enough text extracted.")
+        else:
+            findings = analyze_contract_text(text)
+            summary = summarize_text(text)
+
+            if findings:
+                st.markdown("### 🚩 Detected Risks")
+                high = len([f for f in findings if f["risk"] == "high"])
+                med = len([f for f in findings if f["risk"] == "medium"])
+                st.metric("Total Issues", len(findings))
+                st.markdown(f"- 🔴 High Risk: {high}")
+                st.markdown(f"- 🟡 Medium Risk: {med}")
+
+                for i, f in enumerate(findings):
+                    with st.expander(f"📌 {f['issue']} (Line {f['line']})"):
+                        st.write(f"**Clause**: {f['text']}")
+                        st.write(f"**Risk Level**: {'🔴 High' if f['risk']=='high' else '🟡 Medium'}")
+                        st.info(f"💡 **Suggestion**: {f['suggestion']}")
+            else:
+                st.success("✅ No major risks detected!")
+
+            # PDF Report
+            st.markdown("### 📄 Download Report")
             try:
-                if uploaded_file.name.endswith(".pdf"):
-                    pdf_stream = BytesIO(file_bytes)
-                    doc = fitz.open(stream=pdf_stream, filetype="pdf")
-                    text = "\n".join([page.get_text() for page in doc])
-                    if len(text.strip()) < 50:
-                        text = ""
-                        for page in doc:
-                            pix = page.get_pixmap()
-                            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                            text += pytesseract.image_to_string(img)
-                elif uploaded_file.name.endswith(".docx"):
-                    doc_stream = BytesIO(file_bytes)
-                    doc = Document(doc_stream)
-                    text = "\n".join([p.text for p in doc.paragraphs])
-
-                if len(text.strip()) < 50:
-                    st.warning("⚠️ Not enough text extracted.")
-                else:
-                    findings = analyze_contract_text(text)
-                    summary = summarize_text(text)
-
-                    if findings:
-                        st.markdown("### 🚩 Detected Risks")
-                        high = len([f for f in findings if f["risk"] == "high"])
-                        med = len([f for f in findings if f["risk"] == "medium"])
-                        st.metric("Total Issues", len(findings))
-                        st.markdown(f"- 🔴 High Risk: {high}")
-                        st.markdown(f"- 🟡 Medium Risk: {med}")
-
-                        for i, f in enumerate(findings):
-                            with st.expander(f"📌 {f['issue']} (Line {f['line']})"):
-                                st.write(f"**Clause**: {f['text']}")
-                                st.write(f"**Risk Level**: {'🔴 High' if f['risk']=='high' else '🟡 Medium'}")
-                                st.info(f"💡 **Suggestion**: {f['suggestion']}")
-                    else:
-                        st.success("✅ No major risks detected!")
-
-                    # PDF Report
-                    st.markdown("### 📄 Download Report")
-                    try:
-                        pdf_bytes = generate_report_pdf(summary, findings)
-                        st.download_button(
-                            label="📥 Download Full Report (PDF)",
-                            data=pdf_bytes,
-                            file_name=f"legalease_analysis_{uploaded_file.name.split('.')[0]}.pdf",
-                            mime="application/pdf"
-                        )
-                    except Exception as e:
-                        st.error(f"Report generation failed: {e}")
+                pdf_bytes = generate_report_pdf(summary, findings)
+                st.download_button(
+                    label="📥 Download Full Report (PDF)",
+                    data=pdf_bytes,
+                    file_name=f"legalease_analysis_{uploaded_file.name.split('.')[0]}.pdf",
+                    mime="application/pdf"
+                )
+            except Exception as e:
+                st.error(f"Report generation failed: {e}")
 
 # -----------------------------
 # Footer
