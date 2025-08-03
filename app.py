@@ -22,8 +22,8 @@ def extract_text_from_pdf(file_bytes):
         for page in doc:
             text += page.get_text()
         return text
-    except Exception:
-        return ""
+    except Exception as e:
+        return f"PDF extraction error: {str(e)}"
 
 def extract_text_with_ocr(file_bytes):
     try:
@@ -58,11 +58,11 @@ def summarize_text(text: str, max_length=300, min_length=100):
     if len(text.split()) < 50:
         return "Text too short to summarize."
     try:
-        sentences = text.split('. ')
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
         summary = '. '.join(sentences[:4]) + '...'
-        return summary if len(summary) > 20 else "Summary could not be generated."
-    except:
-        return "Summary generation failed."
+        return summary if len(summary) > min_length else "Summary could not be generated."
+    except Exception as e:
+        return f"Summary generation failed: {e}"
 
 def analyze_contract_text(text: str):
     findings = []
@@ -80,7 +80,8 @@ def analyze_contract_text(text: str):
     for i, line in enumerate(lines):
         line_lower = line.lower()
         for pattern, issue, risk, suggestion in patterns:
-            if st.session_state.get("debug"): print(pattern, line_lower)
+            if st.session_state.get("debug"):
+                print(f"Checking pattern: {pattern} against line: {line_lower}")
             if re.search(pattern, line_lower):
                 findings.append({
                     "line": i + 1,
@@ -149,7 +150,7 @@ def generate_report_pdf(summary: str, findings: list):
     pdf.set_text_color(150, 0, 0)  
     pdf.multi_cell(0, 6, clean_text_for_pdf("⚠️ DISCLAIMER: This report is AI-generated and not legal advice. Consult a licensed attorney."))  
 
-    return bytes(pdf.output(dest='S'))
+    return bytes(pdf.output(dest='S').encode('latin-1'))
 
 # -----------------------------
 # UI Setup
@@ -180,9 +181,9 @@ with st.sidebar:
     )
     st.markdown("---")
     st.markdown("### 📚 Legal Resources")
-    st.markdown("- [Ethiopian Civil Code](https://example.com)")
-    st.markdown("- [Contract Law Guidelines](https://example.com)")
-    st.markdown("- [Legal Aid Services](https://example.com)")
+    st.markdown("- [Ethiopian Civil Code](https://chilot.me)")
+    st.markdown("- [Contract Law Guidelines](https://chilot.me)")
+    st.markdown("- [Legal Aid Services](https://ethiopianlaw.org)")
 
 if theme == "🌙 Dark":  
     st.markdown("""  
@@ -214,11 +215,11 @@ with tab1:
     st.header("💬 Smart Legal Assistant")
     st.markdown("Ask about Ethiopian civil law, contracts, rights, and more. You can also upload documents for analysis.")
     
-    # Initialize chat history with a welcome message if empty
+    # Initialize chat history
     if "messages" not in st.session_state:  
         st.session_state.messages = [{
             "role": "assistant", 
-            "content": "Hello! I'm LegalEase AI, your legal assistant. How can I help you with Ethiopian law today?",
+            "content": "Hello! I'm LegalEase AI. I can help with:\n- Ethiopian contract law\n- Document review\n- Legal concepts\n\nHow can I assist you today?",
             "timestamp": datetime.now().isoformat()
         }]
     
@@ -236,6 +237,7 @@ with tab1:
         key="chat_file"
     )
     doc_context = ""
+    findings = []
     if uploaded_file:
         with st.spinner("Processing document..."):
             file_bytes = uploaded_file.read()  
@@ -243,172 +245,72 @@ with tab1:
             doc_context = extract_text_from_file(file_bytes, file_type)
             if len(doc_context.strip()) > 50:
                 st.success(f"✅ Document loaded: {uploaded_file.name}")
-            else:
-                st.warning("⚠️ Could not extract enough text from the document.")
-    
-    # Chat input
-    if prompt := st.chat_input("Ask a legal question..."):  
-        # Add user message to chat history
-        user_msg = {
-            "role": "user", 
-            "content": prompt,
-            "timestamp": datetime.now().isoformat()
-        }
-        st.session_state.messages.append(user_msg)
-        
-        with st.chat_message("user"):  
-            st.write(prompt)
-            st.caption(f"{datetime.fromisoformat(user_msg['timestamp']).strftime('%H:%M')}")
-        
-        # Generate response
-        with st.spinner("🧠 Analyzing..."):  
-            # Simulate typing effect
-            message_placeholder = st.empty()
-            full_response = ""
-            
-            # Enhanced response generation based on mode and context
-            if doc_context:
-                summary = summarize_text(doc_context)
-                if chatbot_mode == "Contract Analysis":
-                    response = (
-                        f"Regarding your document about '{summary[:100]}...', {prompt} would depend on specific terms. "
-                        "In Ethiopian contract law, Article 1718 requires consent, capacity, object, and cause. "
-                        "From your document, I found relevant clauses that may apply. "
-                        "For precise advice, consult a licensed lawyer."
-                    )
-                else:
-                    response = (
-                        f"Based on the document you provided and Ethiopian law, {prompt} would typically be governed by "
-                        "general principles found in the Civil Code. The document appears to cover related matters. "
-                        "Please consult a lawyer for specific advice."
-                    )
-            else:
-                if chatbot_mode == "General Legal":
-                    response = (
-                        f"Under Ethiopian law, {prompt} is typically addressed in the Civil Code. "
-                        "For example, Article 1718 covers basic contract principles. "
-                        "Would you like more specific references or case examples?"
-                    )
-                elif chatbot_mode == "Contract Analysis":
-                    response = (
-                        f"For contract-related questions like '{prompt}', Ethiopian law requires clear terms, "
-                        "mutual consent, and lawful purpose (Civil Code Articles 1678-1690). "
-                        "Upload your contract for more specific analysis."
-                    )
-                else:
-                    response = (
-                        f"Regarding {prompt}, the legal framework in Ethiopia would consider this under "
-                        "general civil law principles. For document-specific advice, please upload the relevant file."
-                    )
-            
-            # Adjust tone
-            if chatbot_tone == "Simple":
-                response = response.replace("typically addressed", "usually covered")
-                response = response.replace("would depend on", "depends on")
-                response = response.replace("governed by", "covered by")
-            elif chatbot_tone == "Formal":
-                response = response.replace("like", "such as")
-                response = response.replace("would be", "shall be considered")
-            
-            # Simulate typing
-            for chunk in response.split():
-                full_response += chunk + " "
-                time.sleep(0.05)
-                message_placeholder.markdown(full_response + "▌")
-            message_placeholder.markdown(full_response)
-            
-            # Add assistant response to chat history
-            assistant_msg = {
-                "role": "assistant", 
-                "content": full_response,
-                "timestamp": datetime.now().isoformat()
-            }
-            st.session_state.messages.append(assistant_msg)
-    
-    # Chat management buttons
-    col1, col2, col3 = st.columns(3)
-with col1:
-# Enhanced Chatbot Section
-with tab1:
-    st.header("💬 Smart Legal Assistant")
-    st.markdown("Ask about Ethiopian civil law, contracts, rights, and more.")
-
-    # Initialize with welcome message
-    if "messages" not in st.session_state:
-        st.session_state.messages = [{
-            "role": "assistant",
-            "content": "Hello! I'm LegalEase AI. I can help with:\n- Ethiopian contract law\n- Document review\n- Legal concepts\n\nHow can I assist you today?",
-            "timestamp": datetime.now().isoformat()
-        }]
-
-    # Display chat history
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
-            if "timestamp" in msg:
-                st.caption(f"{datetime.fromisoformat(msg['timestamp']).strftime('%H:%M')}")
-
-    # Document context
-    uploaded_file = st.file_uploader(
-        "📎 Upload document for context (optional)",
-        type=["pdf", "docx"],
-        key="chat_file"
-    )
-    doc_context = ""
-    if uploaded_file:
-        with st.spinner("Processing document..."):
-            file_bytes = uploaded_file.read()
-            file_type = "pdf" if uploaded_file.name.endswith(".pdf") else "docx"
-            doc_context = extract_text_from_file(file_bytes, file_type)
-            if len(doc_context.strip()) > 50:
-                st.success(f"✅ Document loaded: {uploaded_file.name}")
                 findings = analyze_contract_text(doc_context)
             else:
                 st.warning("⚠️ Could not extract enough text from the document.")
-
+    
     # Response generation logic
     def generate_response(prompt, context=None, mode="General Legal", tone="Balanced"):
-        # Legal knowledge base
+        # Ethiopian legal knowledge base
         legal_db = {
-            "contract_validity": {
-                "ethiopian_law": "Articles 1678-1690 of the Ethiopian Civil Code require four elements: 1) Consent, 2) Capacity, 3) Lawful object, 4) Lawful cause",
-                "common_issues": "Common validity issues include: unclear terms, unequal bargaining power, illegal purposes"
+            "contract": {
+                "validity": {
+                    "source": "Ethiopian Civil Code Articles 1678-1690",
+                    "content": "Four essential elements:\n1. Consent of the parties\n2. Capacity to contract\n3. Lawful object\n4. Lawful cause",
+                    "examples": "Common issues: unclear terms, unequal bargaining power, illegal purposes"
+                },
+                "termination": {
+                    "source": "Civil Code Articles 1806-1820 & Labor Proclamation No. 1156/2019",
+                    "content": "Termination conditions vary by contract type:\n- Employment: Notice periods apply\n- Commercial: May include breach clauses",
+                    "notice": "Reasonable notice typically required (30 days common)"
+                }
             },
-            "termination": {
-                "rights": "Termination rights depend on contract type. Employment contracts follow Labor Proclamation No. 1156/2019",
-                "notice": "Reasonable notice is typically required unless for cause"
-            },
-            "liability": {
-                "limits": "Liability can be limited but not excluded for gross negligence or willful misconduct",
-                "standard": "Ethiopian courts typically apply proportionality in liability assessment"
+            "property": {
+                "rights": {
+                    "source": "Constitution Article 40 & Civil Code",
+                    "content": "Right to private property guaranteed\nExpropriation requires fair compensation"
+                }
             }
         }
 
-        # Document-specific analysis
-        doc_analysis = ""
-        if context:
-            summary = summarize_text(context)
-            doc_analysis = f"\n\nDocument Analysis:\n- Summary: {summary[:200]}..."
-            if 'terminat' in prompt.lower():
-                doc_analysis += "\n- Found termination clause" if any(f["issue"] == "One-Sided Termination" for f in findings) else "\n- No termination clauses detected"
-            if 'liable' in prompt.lower():
-                doc_analysis += "\n- Liability clauses: " + ("Present" if any(f["issue"] == "Unlimited Liability" for f in findings) else "Standard"
-
         # Generate base response
         response = ""
+        sources = []
         
-        if "valid" in prompt.lower() or "enforce" in prompt.lower():
-            response = f"Contract Validity:\n{legal_db['contract_validity']['ethiopian_law']}\n{legal_db['contract_validity']['common_issues']}"
-        elif "terminat" in prompt.lower():
-            response = f"Termination:\n{legal_db['termination']['rights']}\n{legal_db['termination']['notice']}"
-        elif "liable" in prompt.lower() or "responsib" in prompt.lower():
-            response = f"Liability:\n{legal_db['liability']['limits']}\n{legal_db['liability']['standard']}"
+        # Contract-related questions
+        if "contract" in prompt.lower() or "agreement" in prompt.lower():
+            if "valid" in prompt.lower() or "enforce" in prompt.lower():
+                contract = legal_db["contract"]["validity"]
+                response = f"Contract Validity Requirements:\n{contract['content']}\n\nExamples: {contract['examples']}"
+                sources.append(contract["source"])
+            elif "terminat" in prompt.lower() or "end" in prompt.lower():
+                termination = legal_db["contract"]["termination"]
+                response = f"Contract Termination Rules:\n{termination['content']}\n\nNotice: {termination['notice']}"
+                sources.append(termination["source"])
+        
+        # Property-related questions
+        elif "property" in prompt.lower() or "land" in prompt.lower():
+            property = legal_db["property"]["rights"]
+            response = f"Property Rights:\n{property['content']}"
+            sources.append(property["source"])
+        
+        # Default response
         else:
             response = f"Regarding {prompt}, Ethiopian law generally requires... [provide general principles]"
 
         # Add document context if available
         if context:
-            response = f"Based on your document and Ethiopian law:\n{response}{doc_analysis}"
+            summary = summarize_text(context)
+            response = f"Document Context:\n- Summary: {summary[:200]}...\n\n{response}"
+            
+            if findings:
+                response += "\n\nKey Document Findings:"
+                for f in findings[:3]:
+                    response += f"\n- {f['issue']} (Risk: {f['risk'].upper()})"
+
+        # Add legal sources
+        if sources:
+            response += "\n\nLegal Sources:\n- " + "\n- ".join(sources)
 
         # Apply tone
         if tone == "Simple":
@@ -420,31 +322,30 @@ with tab1:
             response = response.replace("should", "it is advisable to")
             response = "In accordance with legal principles, " + response
 
-        # Always include disclaimer
+        # Final disclaimer
         response += "\n\nNote: This is general information, not legal advice. Consult a qualified attorney."
 
         return response
 
     # Chat input
-    if prompt := st.chat_input("Ask a legal question..."):
+    if prompt := st.chat_input("Ask a legal question..."):  
         # Add user message
         user_msg = {
-            "role": "user",
+            "role": "user", 
             "content": prompt,
             "timestamp": datetime.now().isoformat()
         }
         st.session_state.messages.append(user_msg)
         
-        with st.chat_message("user"):
+        with st.chat_message("user"):  
             st.write(prompt)
             st.caption(f"{datetime.fromisoformat(user_msg['timestamp']).strftime('%H:%M')}")
-
+        
         # Generate and display response
-        with st.spinner("Analyzing..."):
+        with st.spinner("Analyzing..."):  
             message_placeholder = st.empty()
             full_response = ""
             
-            # Get generated response
             response = generate_response(
                 prompt,
                 context=doc_context if uploaded_file else None,
@@ -458,14 +359,54 @@ with tab1:
                 time.sleep(0.1)
                 message_placeholder.markdown(full_response + "▌")
             message_placeholder.markdown(full_response)
-
-        # Add assistant response
-        assistant_msg = {
-            "role": "assistant",
-            "content": full_response,
-            "timestamp": datetime.now().isoformat()
-        }
-        st.session_state.messages.append(assistant_msg)
+            
+            # Add assistant response
+            assistant_msg = {
+                "role": "assistant", 
+                "content": full_response,
+                "timestamp": datetime.now().isoformat()
+            }
+            st.session_state.messages.append(assistant_msg)
+    
+    # Chat management buttons
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("🧹 Clear Chat", use_container_width=True):
+            st.session_state.messages = [{
+                "role": "assistant", 
+                "content": "Hello! I'm LegalEase AI. How can I help you with Ethiopian law today?",
+                "timestamp": datetime.now().isoformat()
+            }]
+            st.rerun()
+    with col2:
+        if st.session_state.messages:
+            chat_text = "\n".join([f"{m['role'].capitalize()}: {m['content']}" for m in st.session_state.messages])  
+            st.download_button(
+                "📥 Save Chat", 
+                data=chat_text, 
+                file_name="legalease_chat.txt",
+                use_container_width=True
+            )
+    with col3:
+        example_questions = [
+            "What makes a contract valid in Ethiopia?",
+            "How can I terminate a lease agreement?",
+            "What are my property rights?"
+        ]
+        example = st.selectbox(
+            "💡 Example Questions",
+            ["Select an example..."] + example_questions,
+            index=0
+        )
+        if example and example != "Select an example...":
+            if "example_used" not in st.session_state or st.session_state.example_used != example:
+                st.session_state.example_used = example
+                st.session_state.messages.append({
+                    "role": "user", 
+                    "content": example,
+                    "timestamp": datetime.now().isoformat()
+                })
+                st.rerun()
 
 # -----------------------------
 # TAB 2: Summarize
