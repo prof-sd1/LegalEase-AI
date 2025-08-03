@@ -7,7 +7,6 @@ from docx import Document
 import pytesseract
 import numpy as np
 import re
-import os
 
 # -----------------------------
 # Services (Embedded for HF)
@@ -94,6 +93,7 @@ def analyze_contract_text(text: str):
 def generate_report_pdf(summary: str, findings: list):
     from fpdf import FPDF
     from datetime import datetime
+    import os
 
     class PDF(FPDF):
         def header(self):
@@ -139,11 +139,10 @@ def generate_report_pdf(summary: str, findings: list):
 
     pdf = PDF()
 
-    # Register DejaVuSans fonts (update the path if necessary)
-    fonts_path = "/usr/share/fonts/truetype/dejavu/"
-    pdf.add_font('DejaVuSans', '', os.path.join(fonts_path, 'DejaVuSans.ttf'), uni=True)
-    pdf.add_font('DejaVuSans', 'B', os.path.join(fonts_path, 'DejaVuSans-Bold.ttf'), uni=True)
-    pdf.add_font('DejaVuSans', 'I', os.path.join(fonts_path, 'DejaVuSans-Oblique.ttf'), uni=True)
+    # Register fonts from local 'fonts' folder
+    pdf.add_font('DejaVuSans', '', 'fonts/DejaVuSans.ttf', uni=True)
+    pdf.add_font('DejaVuSans', 'B', 'fonts/DejaVuSans-Bold.ttf', uni=True)
+    pdf.add_font('DejaVuSans', 'I', 'fonts/DejaVuSans-Oblique.ttf', uni=True)
 
     pdf.add_page()
     pdf.add_section("Document Summary", summary)
@@ -275,4 +274,4 @@ with tab3:
 # Footer
 # -----------------------------
 st.markdown("---")
-st.caption("Built with ❤️ for Ethiopian legal empowerment • Capstone 2025")
+st.caption("Built with Samuel for Ethiopian legal empowerment • Capstone 2025")
