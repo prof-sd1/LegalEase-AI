@@ -327,7 +327,7 @@ with tab1:
     
     # Chat management buttons
     col1, col2, col3 = st.columns(3)
-    with col1:
+with col1:
 # Enhanced Chatbot Section
 with tab1:
     st.header("💬 Smart Legal Assistant")
