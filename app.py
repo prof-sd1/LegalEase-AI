@@ -1,4 +1,5 @@
-# app.py - LegalEase AI: All Modules in One
+# app.py - LegalEase AI: All Modules in One with Themes and New Features
+
 import streamlit as st
 from io import BytesIO
 from PIL import Image
@@ -9,7 +10,7 @@ import numpy as np
 import re
 
 # -----------------------------
-# Services (Embedded for HF)
+# Services
 # -----------------------------
 
 def extract_text_from_pdf(file_bytes):
@@ -56,7 +57,6 @@ def summarize_text(text: str, max_length=300, min_length=100):
     if len(text.split()) < 50:
         return "Text too short to summarize."
     try:
-        # Simulate BART (replace with real summarizer when deploying)
         sentences = text.split('. ')
         summary = '. '.join(sentences[:4]) + '...'
         return summary if len(summary) > 20 else "Summary could not be generated."
@@ -90,11 +90,8 @@ def analyze_contract_text(text: str):
                 })
     return findings
 
-# Clean text for PDF output: remove or replace unsupported characters
 def clean_text_for_pdf(text: str) -> str:
-    # Replace em-dash and en-dash with hyphen
     text = text.replace('—', '-').replace('–', '-')
-    # Remove emojis and non-ASCII chars (keep printable ASCII)
     return ''.join(c if 32 <= ord(c) <= 126 else ' ' for c in text)
 
 def generate_report_pdf(summary: str, findings: list):
@@ -151,30 +148,46 @@ def generate_report_pdf(summary: str, findings: list):
     pdf.set_text_color(150, 0, 0)
     pdf.multi_cell(0, 6, clean_text_for_pdf("⚠️ DISCLAIMER: This report is AI-generated and not legal advice. Consult a licensed attorney."))
 
-    # ✅ Return bytes instead of bytearray
     return bytes(pdf.output(dest='S'))
+
 # -----------------------------
 # UI Setup
 # -----------------------------
+
 st.set_page_config(page_title="LegalEase AI", layout="centered")
 st.title("💼 LegalEase AI — Your Legal Assistant")
 st.markdown("Powered by AI • For Ethiopian Law • Not Legal Advice")
 st.caption("⚠️ This tool does not provide legal advice. Always consult a licensed attorney.")
 
-# Sidebar - Debug
+# Sidebar Settings
 with st.sidebar:
+    st.markdown("## ⚙️ Settings")
+    theme = st.radio("Choose Theme", ["🌞 Light", "🌙 Dark"], key="theme")
     st.checkbox("🔧 Debug Mode", key="debug")
 
+    if theme == "🌙 Dark":
+        st.markdown("""
+            <style>
+                body, .stApp { background-color: #0e1117; color: #fafafa; }
+                .stButton>button { background-color: #1f2229; color: white; }
+                .stTextInput>div>input, .stDownloadButton button { background-color: #1f2229; color: white; }
+            </style>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("<style>body, .stApp { background-color: #ffffff; color: #000000; }</style>", unsafe_allow_html=True)
+
 # Tabs
-tab1, tab2, tab3 = st.tabs(["🗨️ Ask a Question", "📄 Summarize Document", "🔍 Analyze Risks"])
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🗨️ Ask a Question", "📄 Summarize Document", "🔍 Analyze Risks", "📚 Extract Clauses"
+])
 
 # -----------------------------
-# TAB 1: Chat (Simulated)
+# TAB 1: Chatbot
 # -----------------------------
 with tab1:
     st.header("Chat with LegalEase AI")
     st.markdown("Ask about Ethiopian civil law, contracts, rights, and more.")
-    
+
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -196,6 +209,10 @@ with tab1:
         st.session_state.messages.append({"role": "assistant", "content": response})
         with st.chat_message("assistant"):
             st.write(response)
+
+    if st.session_state.messages:
+        chat_text = "\n".join([f"{m['role'].capitalize()}: {m['content']}" for m in st.session_state.messages])
+        st.download_button("📥 Download Chat History", data=chat_text, file_name="legalease_chat.txt")
 
 # -----------------------------
 # TAB 2: Summarize
@@ -242,15 +259,13 @@ with tab3:
             findings = analyze_contract_text(text)
             summary = summarize_text(text)
 
-            if findings:
-                st.markdown("### 🚩 Detected Risks")
-                high = len([f for f in findings if f["risk"] == "high"])
-                med = len([f for f in findings if f["risk"] == "medium"])
-                st.metric("Total Issues", len(findings))
-                st.markdown(f"- 🔴 High Risk: {high}")
-                st.markdown(f"- 🟡 Medium Risk: {med}")
+            st.markdown("### 🎯 Filter Risks")
+            selected_levels = st.multiselect("Select risk levels to show", ["high", "medium"], default=["high", "medium"])
+            filtered = [f for f in findings if f["risk"] in selected_levels]
 
-                for i, f in enumerate(findings):
+            if filtered:
+                st.metric("Total Issues", len(filtered))
+                for i, f in enumerate(filtered):
                     with st.expander(f"📌 {f['issue']} (Line {f['line']})"):
                         st.write(f"**Clause**: {f['text']}")
                         st.write(f"**Risk Level**: {'🔴 High' if f['risk']=='high' else '🟡 Medium'}")
@@ -258,10 +273,9 @@ with tab3:
             else:
                 st.success("✅ No major risks detected!")
 
-            # PDF Report
-            st.markdown("### 📄 Download Report")
             try:
                 pdf_bytes = generate_report_pdf(summary, findings)
+                st.markdown("### 📄 Download Report")
                 st.download_button(
                     label="📥 Download Full Report (PDF)",
                     data=pdf_bytes,
@@ -270,6 +284,30 @@ with tab3:
                 )
             except Exception as e:
                 st.error(f"Report generation failed: {e}")
+
+# -----------------------------
+# TAB 4: Clause Extractor
+# -----------------------------
+with tab4:
+    st.header("📚 Clause Extractor")
+    uploaded_file = st.file_uploader("Upload Legal PDF/DOCX", type=["pdf", "docx"], key="clause")
+
+    if uploaded_file:
+        file_bytes = uploaded_file.read()
+        file_type = "pdf" if uploaded_file.name.endswith(".pdf") else "docx"
+        text = extract_text_from_file(file_bytes, file_type)
+
+        if len(text.strip()) < 50:
+            st.warning("⚠️ Not enough text extracted.")
+        else:
+            st.success("✅ Extracted contract text.")
+            st.markdown("### 📑 Detected Clauses")
+
+            clauses = re.split(r"\n(?=\d+\.\s)", text)
+            for i, clause in enumerate(clauses):
+                if len(clause.strip()) > 20:
+                    with st.expander(f"📄 Clause {i+1}"):
+                        st.write(clause.strip())
 
 # -----------------------------
 # Footer
