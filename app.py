@@ -98,6 +98,7 @@ def clean_text_for_pdf(text: str) -> str:
     return ''.join(c if 32 <= ord(c) <= 126 else ' ' for c in text)
 
 def generate_report_pdf(summary: str, findings: list):
+def generate_report_pdf(summary: str, findings: list):
     from fpdf import FPDF
     from datetime import datetime
 
@@ -150,8 +151,9 @@ def generate_report_pdf(summary: str, findings: list):
     pdf.set_font('Helvetica', 'I', 10)
     pdf.set_text_color(150, 0, 0)
     pdf.multi_cell(0, 6, clean_text_for_pdf("⚠️ DISCLAIMER: This report is AI-generated and not legal advice. Consult a licensed attorney."))
-    return pdf.output(dest='S').encode('latin1')
 
+    # FIX HERE: return the raw bytearray, no encoding
+    return pdf.output(dest='S')
 # -----------------------------
 # UI Setup
 # -----------------------------
