@@ -45,11 +45,3 @@ _(Replace with your actual link after deployment)_
 > This tool provides **general informational support only**.  
 > It is **not legal advice**. Always consult a licensed attorney before making legal decisions.
 
----
-
-## 📦 Run Locally
-
-### 1. Clone the repo
-```bash
-git clone https://github.com/your-username/legalease-ai.git
-cd legalease-ai
