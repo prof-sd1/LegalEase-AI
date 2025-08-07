@@ -617,7 +617,7 @@ with tab3:
                 st.metric("Total Issues", len(filtered))  
                 for i, f in enumerate(filtered):  
                     with st.expander(f"📌 {f['issue']} (Line {f['line']})"):  
-                        st.write(f"**Clause**: {f['text']}")  
+                        st.write(f"**Clause**: {f['matched_text']}")
                         st.write(f"**Risk Level**: {'🔴 High' if f['risk']=='high' else '🟡 Medium'}")  
                         st.info(f"💡 **Suggestion**: {f['suggestion']}")  
             else:  
