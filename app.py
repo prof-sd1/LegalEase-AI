@@ -153,59 +153,122 @@ def generate_report_pdf(summary: str, findings: list):
     return bytes(pdf.output(dest='S').encode('latin-1'))
 
 # -----------------------------
-# UI Setup
+# Modern UI Setup with Themes
 # -----------------------------
+import streamlit as st
 
-st.set_page_config(page_title="LegalEase AI", layout="centered", page_icon="⚖️")
-st.title("💼 LegalEase AI — Your Legal Assistant")
-st.markdown("Powered by AI • For Ethiopian Law • Not Legal Advice")
-st.caption("⚠️ This tool does not provide legal advice. Always consult a licensed attorney.")
+st.set_page_config(
+    page_title="LegalEase AI",
+    layout="wide",
+    page_icon="⚖️"
+)
 
-# Sidebar Settings
+# ---- Theming ----
+theme = st.sidebar.radio("🌓 Theme Mode", ["🌞 Light", "🌙 Dark"], key="theme_mode")
+
+# Dynamic CSS styling based on theme
+if theme == "🌙 Dark":
+    st.markdown("""
+        <style>
+            body, .stApp { background-color: #0e1117; color: #fafafa; }
+            .stButton>button, .stDownloadButton>button {
+                background-color: #1f2229;
+                color: white;
+                border-radius: 8px;
+                padding: 0.5em 1em;
+            }
+            .stTextInput>div>input {
+                background-color: #1f2229;
+                color: white;
+                border-radius: 5px;
+            }
+            .chat-message-user {
+                background-color: #1a3a4a !important;
+                padding: 1em;
+                border-radius: 10px;
+            }
+            .chat-message-assistant {
+                background-color: #2a2a3a !important;
+                padding: 1em;
+                border-radius: 10px;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+        <style>
+            body, .stApp { background-color: #ffffff; color: #000000; }
+            .stButton>button, .stDownloadButton>button {
+                background-color: #f5f5f5;
+                color: #000;
+                border-radius: 8px;
+                padding: 0.5em 1em;
+            }
+            .stTextInput>div>input {
+                background-color: #ffffff;
+                color: #000000;
+                border-radius: 5px;
+            }
+            .chat-message-user {
+                background-color: #e6f2ff !important;
+                padding: 1em;
+                border-radius: 10px;
+            }
+            .chat-message-assistant {
+                background-color: #f0f0f0 !important;
+                padding: 1em;
+                border-radius: 10px;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
+# ---- Header Section ----
+st.markdown("<h1 style='font-size: 2.5em;'>💼 LegalEase AI</h1>", unsafe_allow_html=True)
+st.markdown("#### Empowering Ethiopian Legal Access Through AI")
+st.markdown("🚨 *This tool does not provide legal advice. Always consult a licensed attorney.*")
+st.markdown("---")
+
+# ---- Sidebar: Settings ----
 with st.sidebar:
-    st.markdown("## ⚙️ Settings")
-    theme = st.radio("Choose Theme", ["🌞 Light", "🌙 Dark"], key="theme")
-    st.checkbox("🔧 Debug Mode", key="debug")
-    
-    # Chatbot settings
-    st.markdown("## 🤖 Chatbot Settings")
+    st.markdown("## ⚙️ App Settings")
+    st.checkbox("🛠️ Debug Mode", key="debug_mode")
+
+    st.markdown("## 🤖 Chatbot Preferences")
     chatbot_mode = st.selectbox(
-        "Chat Mode",
+        "AI Mode",
         ["General Legal", "Contract Analysis", "Document Review"],
-        help="Select the type of assistance you need"
+        help="Choose the AI assistant's focus"
     )
+
     chatbot_tone = st.select_slider(
-        "Response Tone",
+        "Tone of Responses",
         options=["Formal", "Balanced", "Simple"],
         value="Balanced"
     )
+
     st.markdown("---")
     st.markdown("### 📚 Legal Resources")
     st.markdown("- [Ethiopian Civil Code](https://chilot.me)")
     st.markdown("- [Contract Law Guidelines](https://chilot.me)")
     st.markdown("- [Legal Aid Services](https://ethiopianlaw.org)")
 
-if theme == "🌙 Dark":  
-    st.markdown("""  
-        <style>  
-            body, .stApp { background-color: #0e1117; color: #fafafa; }  
-            .stButton>button { background-color: #1f2229; color: white; }  
-            .stTextInput>div>input, .stDownloadButton button { background-color: #1f2229; color: white; }  
-            .chat-message-user { background-color: #1a3a4a !important; }  
-            .chat-message-assistant { background-color: #2a2a3a !important; }  
-        </style>  
-    """, unsafe_allow_html=True)  
-else:  
-    st.markdown("""<style>
-        body, .stApp { background-color: #ffffff; color: #000000; }
-        .chat-message-user { background-color: #e6f2ff !important; }
-        .chat-message-assistant { background-color: #f0f0f0 !important; }
-    </style>""", unsafe_allow_html=True)
-
-# Tabs
+# ---- Main Tabs ----
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🗨️ Smart Chat", "📄 Summarize Document", "🔍 Analyze Risks", "📚 Extract Clauses"
+    "🗨️ Smart Chat",
+    "📄 Summarize Document",
+    "🔍 Analyze Legal Risks",
+    "📚 Extract Contract Clauses"
 ])
+
+# Optional: Set wide container spacing
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # -----------------------------
 # TAB 1: Enhanced Chatbot
@@ -511,4 +574,4 @@ with tab4:
 # -----------------------------
 
 st.markdown("---")
-st.caption("Built with ❤️ for Ethiopian legal empowerment • Capstone 2025")
+st.caption("Built by ASET (Alpha Software Engineering Tutorial) for Ethiopian Legal Empowerment • Capstone 2025")
