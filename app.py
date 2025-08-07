@@ -199,7 +199,8 @@ def generate_report_pdf(summary: str, findings: list):
     pdf.set_text_color(150, 0, 0)  
     pdf.multi_cell(0, 6, clean_text_for_pdf("⚠️ DISCLAIMER: This report is AI-generated and not legal advice. Consult a licensed attorney."))  
 
-    return bytes(pdf.output(dest='S').encode('latin-1'))
+    return pdf.output(dest='S').encode('latin-1')
+
 # -----------------------------
 # UI
 # -----------------------------
