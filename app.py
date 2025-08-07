@@ -66,7 +66,7 @@ def summarize_text(text: str, max_length=300, min_length=100):
         return f"Summary generation failed: {e}"
 
 
-def analyze_contract_text_with_enhancements(text: str, context_lines: int = 1) -> List[Dict]:
+def analyze_contract_text(text: str, context_lines: int = 1) -> List[Dict]:
     """
     Analyze contract text for risky clauses using regex patterns,
     highlight matched phrases, include context, and avoid duplicates.
