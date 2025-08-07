@@ -9,6 +9,7 @@ import re
 import json
 import time
 from datetime import datetime
+from typing import List, Dict
 
 # -----------------------------
 # Services
@@ -64,32 +65,80 @@ def summarize_text(text: str, max_length=300, min_length=100):
     except Exception as e:
         return f"Summary generation failed: {e}"
 
-def analyze_contract_text(text: str):
+
+def analyze_contract_text_with_enhancements(text: str, context_lines: int = 1) -> List[Dict]:
+    """
+    Analyze contract text for risky clauses using regex patterns,
+    highlight matched phrases, include context, and avoid duplicates.
+
+    Args:
+        text (str): The contract text to analyze.
+        context_lines (int): Number of lines before and after a match to include as context.
+
+    Returns:
+        List[Dict]: A list of findings with metadata for each issue detected.
+    """
     findings = []
-    lines = text.split('\n')
+    seen_issues = set()
+
+    # Pre-compiled patterns with metadata
     patterns = [
-        (r"liable for all damages|no limit on liability", "Unlimited Liability", "high",
-         "Cap liability to the amount paid under the contract."),
-        (r"auto-renews|automatically renews", "Automatic Renewal", "medium",
-         "Add 30-day notice to opt-out before renewal."),
-        (r"may terminate at any time|without cause", "One-Sided Termination", "medium",
-         "Ensure both parties have equal termination rights."),
-        (r"governed by New York law|jurisdiction in London", "Foreign Jurisdiction", "high",
-         "Use Ethiopian law and Addis Ababa courts for enforceability."),
+        {
+            "regex": re.compile(r"\bliable for all damages\b|\bno limit on liability\b", re.IGNORECASE),
+            "issue": "Unlimited Liability",
+            "risk": "high",
+            "suggestion": "Cap liability to the amount paid under the contract."
+        },
+        {
+            "regex": re.compile(r"\bauto[- ]?renews\b|\bautomatically renews\b", re.IGNORECASE),
+            "issue": "Automatic Renewal",
+            "risk": "medium",
+            "suggestion": "Add 30-day notice to opt-out before renewal."
+        },
+        {
+            "regex": re.compile(r"\bmay terminate at any time\b|\bwithout cause\b", re.IGNORECASE),
+            "issue": "One-Sided Termination",
+            "risk": "medium",
+            "suggestion": "Ensure both parties have equal termination rights."
+        },
+        {
+            "regex": re.compile(r"\bgoverned by New York law\b|\bjurisdiction in London\b", re.IGNORECASE),
+            "issue": "Foreign Jurisdiction",
+            "risk": "high",
+            "suggestion": "Use Ethiopian law and Addis Ababa courts for enforceability."
+        },
     ]
+
+    lines = text.splitlines()
+    total_lines = len(lines)
+
     for i, line in enumerate(lines):
-        line_lower = line.lower()
-        for pattern, issue, risk, suggestion in patterns:
-            if st.session_state.get("debug"):
-                print(f"Checking pattern: {pattern} against line: {line_lower}")
-            if re.search(pattern, line_lower):
+        line_clean = line.strip()
+        for pattern in patterns:
+            match = pattern["regex"].search(line_clean)
+            if match:
+                issue_key = (i, pattern["issue"])
+                if issue_key in seen_issues:
+                    continue  # Avoid duplicates
+                seen_issues.add(issue_key)
+
+                # Context lines before and after
+                start = max(0, i - context_lines)
+                end = min(total_lines, i + context_lines + 1)
+                context = "\n".join(lines[start:end]).strip()
+
+                # Highlight match in line
+                highlighted_line = pattern["regex"].sub(r"**\g<0>**", line_clean)
+
                 findings.append({
                     "line": i + 1,
-                    "text": line.strip(),
-                    "issue": issue,
-                    "risk": risk,
-                    "suggestion": suggestion
+                    "matched_text": highlighted_line,
+                    "full_context": context,
+                    "issue": pattern["issue"],
+                    "risk": pattern["risk"],
+                    "suggestion": pattern["suggestion"]
                 })
+
     return findings
 
 def clean_text_for_pdf(text: str) -> str:
