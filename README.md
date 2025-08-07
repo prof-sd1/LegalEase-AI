@@ -23,7 +23,6 @@ Perfect for lawyers, law students, and citizens seeking legal clarity — **not 
 ## 🚀 Live Demo
 
 👉 **[Try LegalEase AI on Streamlit](https://legalease-ai-et.streamlit.app/)**  
-_(Replace with your actual link after deployment)_
 
 ---
 
