@@ -142,8 +142,21 @@ def analyze_contract_text(text: str, context_lines: int = 1) -> List[Dict]:
     return findings
 
 def clean_text_for_pdf(text: str) -> str:
-    text = text.replace('—', '-').replace('–', '-')
-    return ''.join(c if 32 <= ord(c) <= 126 else ' ' for c in text)
+    if not text:
+        return ""
+    # Replace em dash and other unsupported characters
+    replacements = {
+        "—": "--",
+        "–": "-",  # en dash
+        "’": "'",  # curly apostrophe
+        "“": '"',
+        "”": '"',
+        # add more as needed
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text
+
 
 def generate_report_pdf(summary: str, findings: list):
     from fpdf import FPDF
