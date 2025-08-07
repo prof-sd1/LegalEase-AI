@@ -151,268 +151,167 @@ def generate_report_pdf(summary: str, findings: list):
     pdf.multi_cell(0, 6, clean_text_for_pdf("⚠️ DISCLAIMER: This report is AI-generated and not legal advice. Consult a licensed attorney."))  
 
     return bytes(pdf.output(dest='S').encode('latin-1'))
-
-import streamlit as st
-
 # -----------------------------
-# Modern UI Setup with Day/Night Theme
+# UI
 # -----------------------------
 
-# Set page config
+# -----------------------------
+# Page Config
+# -----------------------------
 st.set_page_config(
     page_title="LegalEase AI",
-    layout="centered",
+    layout="wide",
     page_icon="⚖️"
 )
 
-# Custom CSS for modern styling
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
-
-    /* General Reset & Theme Colors */
-    :root {
-        --bg-primary: #ffffff;
-        --bg-secondary: #f8f9fa;
-        --text-primary: #1a1a1a;
-        --text-secondary: #4a4a4a;
-        --accent: #4a6fa5; /* Ethiopian blue-inspired */
-        --border: #e0e0e0;
-        --shadow: rgba(0, 0, 0, 0.05);
-    }
-
-    [data-theme="dark"] {
-        --bg-primary: #0f172a;
-        --bg-secondary: #1e293b;
-        --text-primary: #f8f9fa;
-        --text-secondary: #cbd5e1;
-        --accent: #65a3e0;
-        --border: #334155;
-        --shadow: rgba(0, 0, 0, 0.2);
-    }
-
-    body {
-        background-color: var(--bg-primary);
-        color: var(--text-primary);
-        transition: background-color 0.3s, color 0.3s;
-    }
-
-    .stApp {
-        background-color: var(--bg-primary);
-    }
-
-    /* Headers */
-    h1, h2, h3 {
-        color: var(--accent) !important;
-        font-weight: 700 !important;
-    }
-
-    /* Buttons */
-    .stButton > button {
-        background-color: var(--accent);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
-        transition: all 0.2s ease;
-    }
-    .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(74, 111, 165, 0.3);
-    }
-
-    /* Input fields */
-    .stTextInput > div > input,
-    .stTextArea > div > textarea {
-        border-radius: 8px;
-        border: 1px solid var(--border);
-        padding: 0.75rem;
-        background-color: var(--bg-primary);
-        color: var(--text-primary);
-    }
-
-    /* Chat bubbles */
-    .chat-message {
-        padding: 1rem;
-        border-radius: 12px;
-        margin-bottom: 1rem;
-        max-width: 80%;
-        line-height: 1.5;
-    }
-    .chat-message-user {
-        background-color: #e6f2ff;
-        color: #000;
-        align-self: flex-end;
-        margin-left: auto;
-    }
-    .chat-message-assistant {
-        background-color: #f0f4f8;
-        color: #000;
-        align-self: flex-start;
-    }
-    [data-theme="dark"] .chat-message-user {
-        background-color: #1d4ed8;
-        color: #fff;
-    }
-    [data-theme="dark"] .chat-message-assistant {
-        background-color: #334155;
-        color: #fff;
-    }
-    .chat-container {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-        padding: 1rem 0;
-    }
-
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background-color: var(--bg-secondary);
-    }
-    .stSidebar [data-testid="stMarkdownContainer"] > p,
-    .stSidebar [data-testid="stMarkdownContainer"] > h2 {
-        color: var(--text-primary);
-    }
-
-    /* Divider */
-    hr {
-        border-color: var(--border);
-    }
-
-    /* Toggle Switch */
-    .theme-toggle {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin: 0.5rem 0;
-    }
-    .switch {
-        position: relative;
-        display: inline-block;
-        width: 60px;
-        height: 30px;
-    }
-    .switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-    .slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #ccc;
-        transition: .4s;
-        border-radius: 30px;
-    }
-    .slider:before {
-        position: absolute;
-        content: "";
-        height: 22px;
-        width: 22px;
-        left: 4px;
-        bottom: 4px;
-        background-color: white;
-        transition: .4s;
-        border-radius: 50%;
-    }
-    input:checked + .slider {
-        background-color: #4a6fa5;
-    }
-    input:checked + .slider:before {
-        transform: translateX(30px);
-    }
-
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
-        justify-content: center;
-    }
-    .stTabs [data-baseweb="tab"] {
-        font-weight: 600;
-        font-size: 16px;
-        color: var(--text-secondary);
-        border-bottom: 2px solid transparent;
-    }
-    .stTabs [aria-selected="true"] {
-        color: var(--accent) !important;
-        border-bottom: 2px solid var(--accent);
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# Theme toggle in sidebar
+# -----------------------------
+# Sidebar: Theme Toggle First
+# -----------------------------
 with st.sidebar:
-    st.markdown("<h2 style='text-align: center;'>⚙️ Settings</h2>", unsafe_allow_html=True)
+    st.markdown("## 🌓 Theme Mode")
+    theme = st.radio("Choose Theme", ["🌞 Light", "🌙 Dark"], key="theme_mode")
 
-    # Theme toggle (modern switch)
-    st.markdown('<div class="theme-toggle">', unsafe_allow_html=True)
-    theme = st.checkbox("🌙 Dark Mode", key="dark_mode")
-    st.markdown('</div>', unsafe_allow_html=True)
+# -----------------------------
+# Theme CSS Injection
+# -----------------------------
+if theme == "🌙 Dark":
+    st.markdown("""
+        <style>
+            body, .stApp {
+                background-color: #0e1117;
+                color: #fafafa;
+            }
+            .stButton>button, .stDownloadButton>button {
+                background-color: #1f2229;
+                color: white;
+                border-radius: 8px;
+                padding: 0.5em 1em;
+            }
+            .stTextInput>div>input {
+                background-color: #1f2229;
+                color: white;
+                border-radius: 5px;
+            }
+            .chat-message-user {
+                background-color: #1a3a4a !important;
+                padding: 1em;
+                border-radius: 10px;
+                color: #fafafa !important;
+            }
+            .chat-message-assistant {
+                background-color: #2a2a3a !important;
+                padding: 1em;
+                border-radius: 10px;
+                color: #fafafa !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+        <style>
+            body, .stApp {
+                background-color: #ffffff;
+                color: #000000;
+            }
+            .stMarkdown, .stText, .stHeading, .stCaption, .stDataFrame {
+                color: #000000 !important;
+            }
+            .stButton>button, .stDownloadButton>button {
+                background-color: #f5f5f5;
+                color: #000000;
+                border-radius: 8px;
+                padding: 0.5em 1em;
+            }
+            .stTextInput>div>input {
+                background-color: #ffffff;
+                color: #000000;
+                border-radius: 5px;
+            }
+            .chat-message-user {
+                background-color: #e6f2ff !important;
+                padding: 1em;
+                border-radius: 10px;
+                color: #000000 !important;
+            }
+            .chat-message-assistant {
+                background-color: #f0f0f0 !important;
+                padding: 1em;
+                border-radius: 10px;
+                color: #000000 !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # Apply theme via HTML class
-    if st.session_state.dark_mode:
-        st.markdown('<div id="theme-root" data-theme="dark"></div>', unsafe_allow_html=True)
-        st.markdown("""
-        <script>
-        document.querySelector('html').setAttribute('data-theme', 'dark');
-        </script>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown('<div id="theme-root" data-theme="light"></div>', unsafe_allow_html=True)
-        st.markdown("""
-        <script>
-        document.querySelector('html').removeAttribute('data-theme');
-        </script>
-        """, unsafe_allow_html=True)
+# -----------------------------
+# Header Section
+# -----------------------------
+st.markdown("<h1 style='font-size: 2.5em;'>💼 LegalEase AI</h1>", unsafe_allow_html=True)
+st.markdown("#### Empowering Ethiopian Legal Access Through AI")
+st.caption("⚠️ This tool does not provide legal advice. Always consult a licensed attorney.")
+st.markdown("---")
 
-    # Debug mode
-    st.checkbox("🔧 Debug Mode", key="debug")
+# -----------------------------
+# Sidebar: Settings
+# -----------------------------
+with st.sidebar:
+    st.markdown("## ⚙️ App Settings")
+    st.checkbox("🛠️ Debug Mode", key="debug_mode")
 
-    # Chatbot settings
-    st.markdown("### 🤖 Chatbot Settings")
+    st.markdown("## 🤖 Chatbot Preferences")
     chatbot_mode = st.selectbox(
-        "Chat Mode",
+        "AI Mode",
         ["General Legal", "Contract Analysis", "Document Review"],
-        help="Select the type of assistance you need"
+        help="Choose the AI assistant's focus"
     )
+
     chatbot_tone = st.select_slider(
-        "Response Tone",
+        "Tone of Responses",
         options=["Formal", "Balanced", "Simple"],
         value="Balanced"
     )
 
-    st.divider()
-
+    st.markdown("---")
     st.markdown("### 📚 Legal Resources")
-    st.markdown("- [📘 Ethiopian Civil Code](https://www.trans-lex.org/604600/_/ethiopian-civil-code/)")
-    st.markdown("- [📘 Contract Law Guidelines](https://legal.thomsonreuters.com/blog/the-principles-of-contract-law/)")
-    st.markdown("- [📘 Legal Aid Services](https://help.unhcr.org/ethiopia/services/legal/)")
+    st.markdown("- [Ethiopian Civil Code](https://chilot.me)")
+    st.markdown("- [Contract Law Guidelines](https://chilot.me)")
+    st.markdown("- [Legal Aid Services](https://ethiopianlaw.org)")
 
-# Main Header
-col1, col2, col3 = st.columns([1, 3, 1])
-with col2:
-    st.markdown("<h1 style='text-align: center; color: var(--accent);'>⚖️ LegalEase AI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: 1.1em; color: var(--text-secondary);'>Your AI Legal Assistant for Ethiopian Law</p>", unsafe_allow_html=True)
-    st.caption("⚠️ This tool does not provide legal advice. Always consult a licensed attorney.")
-
-st.divider()
-
-# Tabs
+# -----------------------------
+# Main Tabs
+# -----------------------------
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🗨️ Smart Chat", 
-    "📄 Summarize Document", 
-    "🔍 Analyze Risks", 
-    "📚 Extract Clauses"
+    "🗨️ Smart Chat",
+    "📄 Summarize Document",
+    "🔍 Analyze Legal Risks",
+    "📚 Extract Contract Clauses"
 ])
+
+# Optional spacing cleanup
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# -----------------------------
+# You can now build logic into each tab
+# Example placeholder for now
+# -----------------------------
+with tab1:
+    st.write("🤖 Chat with LegalEase AI")
+
+with tab2:
+    st.write("📄 Upload a document to summarize")
+
+with tab3:
+    st.write("🧐 Get AI insights on potential legal risks")
+
+with tab4:
+    st.write("📚 Extract clauses from legal documents")
+
 # -----------------------------
 # TAB 1: Enhanced Chatbot
 # -----------------------------
