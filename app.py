@@ -157,11 +157,14 @@ def clean_text_for_pdf(text: str) -> str:
     return text.encode('ascii', 'ignore').decode('ascii')
 
 def generate_report_pdf(summary: str, findings: list):
+    """Generate a PDF report with contract analysis results"""
     from fpdf import FPDF
     from datetime import datetime
+    import io
 
     class PDF(FPDF):
         def header(self):
+            # Use built-in Helvetica font
             self.set_font('Helvetica', 'B', 16)
             self.cell(0, 10, clean_text_for_pdf('LegalEase AI - Contract Analysis Report'), ln=True, align='C')
             self.ln(10)
@@ -195,29 +198,47 @@ def generate_report_pdf(summary: str, findings: list):
 
             self.set_font('Helvetica', '', 9)
             for f in findings:
-                c = (255, 180, 180) if f["risk"] == "high" else (255, 240, 180)
-                self.set_fill_color(*c)
+                # Set highlight color based on risk level
+                fill_color = (255, 180, 180) if f["risk"] == "high" else (255, 240, 180)
+                self.set_fill_color(*fill_color)
+                
+                # Add cells with cleaned text
                 self.cell(80, 6, clean_text_for_pdf(f["issue"]), 1, 0, 'L', 1)
                 self.cell(30, 6, f["risk"].upper(), 1, 0, 'C', 1)
+                
+                # Clean and truncate suggestion if needed
                 suggestion = clean_text_for_pdf(f["suggestion"])
-                self.cell(80, 6, (suggestion[:60] + "...") if len(suggestion) > 60 else suggestion, 1, 1, 'L', 1)
+                truncated_suggestion = (suggestion[:75] + "...") if len(suggestion) > 75 else suggestion
+                self.cell(80, 6, truncated_suggestion, 1, 1, 'L', 1)
             self.ln(10)
 
+    # Create PDF in memory
     pdf = PDF()
     pdf.add_page()
-    pdf.add_section("Document Summary", summary)
+    
+    # Add content sections
+    pdf.add_section("Document Summary", clean_text_for_pdf(summary))
     pdf.add_risk_table(findings)
+    
+    # Add disclaimer
     pdf.set_font('Helvetica', 'I', 10)
     pdf.set_text_color(150, 0, 0)
     pdf.multi_cell(0, 6, clean_text_for_pdf("DISCLAIMER: This report is AI-generated and not legal advice. Consult a licensed attorney."))
 
-    # Create in-memory PDF
+    # Create in-memory buffer
+    buffer = io.BytesIO()
+    
     try:
-        return pdf.output(dest='S').encode('latin-1')
-    except Exception as e:
-        # Fallback if encoding fails
-        return pdf.output()
-# -----------------------------
+        # First try Latin-1 encoding
+        pdf_output = pdf.output(dest='S').encode('latin-1')
+    except:
+        # Fallback to raw output if encoding fails
+        pdf_output = pdf.output(dest='S')
+    
+    buffer.write(pdf_output)
+    buffer.seek(0)
+    
+    return buffer# -----------------------------
 # UI
 # -----------------------------
 
