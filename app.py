@@ -573,8 +573,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### About LegalEase")
     st.caption("v1.0.0 | Made with ❤️ in Ethiopia")
-    badge(type="github", name="legalease-ai/ethiopia")
-
+    
 # -----------------------------
 # Main Page Layout
 # -----------------------------
