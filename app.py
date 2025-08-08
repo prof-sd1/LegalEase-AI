@@ -164,38 +164,38 @@ def generate_report_pdf(summary: str, findings: list):
     class PDF(FPDF):
         def header(self):
             # Use Arial Unicode MS or DejaVuSans for better Unicode support
-            self.set_font('DejaVuSans', 'B', 16)
+            self.set_font('Arial', 'B', 16)
             self.cell(0, 10, 'LegalEase AI — Contract Analysis Report', ln=True, align='C')
             self.ln(10)
 
         def footer(self):
             self.set_y(-15)
-            self.set_font('DejaVuSans', 'I', 8)
+            self.set_font('Arial', 'I', 8)
             self.cell(0, 10, f'Generated on {datetime.now().strftime("%Y-%m-%d %H:%M")} | Not Legal Advice', align='C')
 
         def add_section(self, title, content):
-            self.set_font('DejaVuSans', 'B', 14)
+            self.set_font('Arial', 'B', 14)
             self.cell(0, 10, title, ln=True)
-            self.set_font('DejaVuSans', '', 12)
+            self.set_font('Arial', '', 12)
             self.multi_cell(0, 6, clean_text_for_pdf(content))
             self.ln(8)
 
         def add_risk_table(self, findings):
             if not findings:
-                self.set_font('DejaVuSans', 'I', 12)
+                self.set_font('Arial', 'I', 12)
                 self.cell(0, 10, 'No risks detected.', ln=True)
                 self.ln(8)
                 return
 
-            self.set_font('DejaVuSans', 'B', 14)
+            self.set_font('Arial', 'B', 14)
             self.cell(0, 10, 'Detected Risks', ln=True)
-            self.set_font('DejaVuSans', 'B', 10)
+            self.set_font('Arial', 'B', 10)
             self.set_fill_color(220, 220, 220)
             self.cell(80, 8, 'Issue', 1, 0, 'C', 1)
             self.cell(30, 8, 'Risk', 1, 0, 'C', 1)
             self.cell(80, 8, 'Suggestion', 1, 1, 'C', 1)
 
-            self.set_font('DejaVuSans', '', 9)
+            self.set_font('Arial', '', 9)
             for f in findings:
                 c = (255, 180, 180) if f["risk"] == "high" else (255, 240, 180)
                 self.set_fill_color(*c)
@@ -206,26 +206,20 @@ def generate_report_pdf(summary: str, findings: list):
 
     pdf = PDF()
     
-    # Add DejaVu Sans font (must be available on system)
-    try:
-        pdf.add_font('DejaVuSans', '', 'DejaVuSans.ttf', uni=True)
-        pdf.add_font('DejaVuSans', 'B', 'DejaVuSans-Bold.ttf', uni=True)
-        pdf.add_font('DejaVuSans', 'I', 'DejaVuSans-Oblique.ttf', uni=True)
-    except:
-        # Fallback to Arial if DejaVu not available
-        pdf.add_font('Arial', '', 'arial.ttf', uni=True)
-        pdf.add_font('Arial', 'B', 'arialbd.ttf', uni=True)
-        pdf.add_font('Arial', 'I', 'ariali.ttf', uni=True)
+    # Add Unicode-compatible font (Arial is commonly available on Windows)
+    pdf.add_font('Arial', '', 'arial.ttf', uni=True)
+    pdf.add_font('Arial', 'B', 'arialbd.ttf', uni=True)
+    pdf.add_font('Arial', 'I', 'ariali.ttf', uni=True)
     
     pdf.add_page()
-    pdf.add_section("Document Summary", summary)
+    pdf.add_section("Document Summary", clean_text_for_pdf(summary))
     pdf.add_risk_table(findings)
-    pdf.set_font('DejaVuSans', 'I', 10)
+    pdf.set_font('Arial', 'I', 10)
     pdf.set_text_color(150, 0, 0)
     pdf.multi_cell(0, 6, clean_text_for_pdf("⚠️ DISCLAIMER: This report is AI-generated and not legal advice. Consult a licensed attorney."))
 
-    # Return PDF file as bytes (no double encode)
-    return pdf.output(dest='S').encode('latin-1')
+    # Return PDF as bytes without double encoding
+    return pdf.output()
 # -----------------------------
 # UI
 # -----------------------------
