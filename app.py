@@ -428,8 +428,6 @@ def generate_report_pdf(summary: str, findings: List[Dict], company_name: str = 
         error_pdf.set_font('Arial', '', 10)
         error_pdf.multi_cell(0, 6, f"An error occurred while generating the PDF report:\n{str(e)}")
         return error_pdf.output(dest='S').encode('latin-1')# -----------------------------
-import streamlit as st
-from streamlit_extras.badges import badge
 
 # -----------------------------
 # Page Config
