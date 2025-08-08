@@ -194,8 +194,7 @@ def analyze_contract_text(
                 context = "\n".join(
                     f"{i+1}: {line}" 
                     for i, line in enumerate(lines[start_line:end_line], 
-                    start=start_line
-                )
+                    start=start_line)
 
                 # Highlight all matches in line
                 highlighted = pattern["compiled"].sub(
