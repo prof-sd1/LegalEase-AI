@@ -12,3 +12,4 @@ langchain
 langchain-openai
 chromadb
 numpy
+streamlit-extras
