@@ -17,28 +17,25 @@ from typing import List, Dict
 
 def extract_text_from_pdf(file_bytes):
     try:
-        with BytesIO(file_bytes) as pdf_stream:
-            with fitz.open(stream=pdf_stream, filetype="pdf") as doc:
-                text = "".join(page.get_text() for page in doc)
-                return text
-    except fitz.FileDataError as e:
-        return f"Corrupt PDF or invalid data: {str(e)}"
+        pdf_stream = BytesIO(file_bytes)
+        doc = fitz.open(stream=pdf_stream, filetype="pdf")
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        return text
     except Exception as e:
-        return f"Unexpected error: {str(e)}"
+        return f"PDF extraction error: {str(e)}"
 
-def extract_text_with_ocr(file_bytes, lang='eng'):
+def extract_text_with_ocr(file_bytes):
     try:
         pdf_stream = BytesIO(file_bytes)
         doc = fitz.open(stream=pdf_stream, filetype="pdf")
-        text = []
+        text = ""
         for page in doc:
-            pix = page.get_pixmap(dpi=300)  # Higher DPI for better OCR
+            pix = page.get_pixmap()
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            page_text = pytesseract.image_to_string(img, lang=lang)
-            text.append(page_text.strip())
-        return "\n".join(text)
-    except pytesseract.TesseractNotFoundError:
-        return "Error: Tesseract OCR not installed. Check system PATH."
+            text += pytesseract.image_to_string(img) + "\n"
+        return text
     except Exception as e:
         return f"OCR failed: {str(e)}"
 
@@ -52,382 +49,175 @@ def extract_text_from_file(file_bytes, file_type):
             doc_stream = BytesIO(file_bytes)
             doc = Document(doc_stream)
             text = "\n".join([p.text for p in doc.paragraphs if p.text])
-        elif file_type == "txt":
-            text = file_bytes.decode("utf-8", errors="replace")  # Handles encoding issues
         else:
             text = ""
         return text
     except Exception as e:
         return f"Text extraction failed: {e}"
-        
-def summarize_text(
-    text: str,
-    max_sentences: int = 4,
-    min_length: int = 100,
-    max_length: int = 300,
-) -> str:
-    """
-    Summarizes text by extracting key sentences.
-    Args:
-        text: Input text to summarize.
-        max_sentences: Maximum number of sentences in the summary.
-        min_length: Minimum summary length (chars). Returns fallback if shorter.
-        max_length: Truncates summary if longer than this.
-    Returns:
-        Summary or error message.
-    """
-    # Check if text is too short
+
+def summarize_text(text: str, max_length=300, min_length=100):
     if len(text.split()) < 50:
         return "Text too short to summarize."
-
     try:
-        # Improved sentence splitting (handles abbreviations, multiple punctuations)
-        sentences = re.split(r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|\!)\s', text)
-        sentences = [s.strip() for s in sentences if s.strip()]
-
-        # Select key sentences (here: first 'max_sentences')
-        summary = " ".join(sentences[:max_sentences])
-
-        # Truncate if exceeding max_length
-        if len(summary) > max_length:
-            summary = summary[:max_length].rsplit(" ", 1)[0] + "..."
-
-        # Validate minimum length
-        return summary if len(summary) >= min_length else "Summary too short."
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        summary = '. '.join(sentences[:4]) + '...'
+        return summary if len(summary) > min_length else "Summary could not be generated."
     except Exception as e:
-        return f"Summary failed: {str(e)}"
+        return f"Summary generation failed: {e}"
 
-import re
-from typing import List, Dict, Tuple, Optional
-from dataclasses import dataclass
 
-@dataclass
-class ContractFinding:
-    line: int
-    matched_text: str
-    full_context: str
-    issue: str
-    risk: str
-    suggestion: str
-    pattern_used: str  # Track which pattern was matched
-
-def analyze_contract_text(
-    text: str,
-    context_lines: int = 1,
-    custom_patterns: Optional[List[Dict]] = None
-) -> List[ContractFinding]:
+def analyze_contract_text(text: str, context_lines: int = 1) -> List[Dict]:
     """
-    Enhanced contract analysis with:
-    - Better duplicate detection
-    - Configurable patterns
-    - More accurate context capture
-    - Structured return type
-    - Pattern tracking
+    Analyze contract text for risky clauses using regex patterns,
+    highlight matched phrases, include context, and avoid duplicates.
 
     Args:
-        text: Contract text to analyze
-        context_lines: Number of lines before/after to include as context
-        custom_patterns: Optional list of additional patterns to check
-    
+        text (str): The contract text to analyze.
+        context_lines (int): Number of lines before and after a match to include as context.
+
     Returns:
-        List of ContractFinding objects with detailed findings
+        List[Dict]: A list of findings with metadata for each issue detected.
     """
-    # Default patterns (can be extended with custom_patterns)
-    base_patterns = [
+    findings = []
+    seen_issues = set()
+
+    # Pre-compiled patterns with metadata
+    patterns = [
         {
-            "regex": r"\bliable for all damages\b|\bno limit on liability\b",
+            "regex": re.compile(r"\bliable for all damages\b|\bno limit on liability\b", re.IGNORECASE),
             "issue": "Unlimited Liability",
             "risk": "high",
             "suggestion": "Cap liability to the amount paid under the contract."
         },
         {
-            "regex": r"\bauto[- ]?renews\b|\bautomatically renews\b",
+            "regex": re.compile(r"\bauto[- ]?renews\b|\bautomatically renews\b", re.IGNORECASE),
             "issue": "Automatic Renewal",
             "risk": "medium",
             "suggestion": "Add 30-day notice to opt-out before renewal."
         },
         {
-            "regex": r"\bterminate at any time\b|\bwithout cause\b",
+            "regex": re.compile(r"\bmay terminate at any time\b|\bwithout cause\b", re.IGNORECASE),
             "issue": "One-Sided Termination",
             "risk": "medium",
             "suggestion": "Ensure both parties have equal termination rights."
         },
         {
-            "regex": r"\bgoverned by [^\n]+ law\b|\bjurisdiction in [^\n]+\b",
+            "regex": re.compile(r"\bgoverned by New York law\b|\bjurisdiction in London\b", re.IGNORECASE),
             "issue": "Foreign Jurisdiction",
             "risk": "high",
-            "suggestion": "Use local law and courts for enforceability."
+            "suggestion": "Use Ethiopian law and Addis Ababa courts for enforceability."
         },
     ]
 
-    # Combine patterns and pre-compile regex
-    all_patterns = base_patterns + (custom_patterns or [])
-    compiled_patterns = []
-    for p in all_patterns:
-        try:
-            compiled_patterns.append({
-                **p,
-                "compiled": re.compile(p["regex"], re.IGNORECASE)
-            })
-        except re.error:
-            continue  # Skip invalid patterns
-
-    findings = []
-    seen_matches = set()  # Track (line_number, matched_text) to avoid dupes
-
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    lines = text.splitlines()
     total_lines = len(lines)
 
-    for line_num, line in enumerate(lines, start=1):
-        for pattern in compiled_patterns:
-            for match in pattern["compiled"].finditer(line):
-                matched_text = match.group()
-                match_key = (line_num, matched_text.lower())
+    for i, line in enumerate(lines):
+        line_clean = line.strip()
+        for pattern in patterns:
+            match = pattern["regex"].search(line_clean)
+            if match:
+                issue_key = (i, pattern["issue"])
+                if issue_key in seen_issues:
+                    continue  # Avoid duplicates
+                seen_issues.add(issue_key)
 
-                if match_key in seen_matches:
-                    continue
-                seen_matches.add(match_key)
+                # Context lines before and after
+                start = max(0, i - context_lines)
+                end = min(total_lines, i + context_lines + 1)
+                context = "\n".join(lines[start:end]).strip()
 
-                # Get context with accurate line numbers
-                start_line = max(0, line_num - 1 - context_lines)
-                end_line = min(total_lines, line_num + context_lines)
-                context = "\n".join(
-                    f"{i+1}: {line}" 
-                    for i, line in enumerate(lines[start_line:end_line], start=start_line)
-                )
-                # Highlight all matches in line
-                highlighted = pattern["compiled"].sub(
-                    lambda m: f"**{m.group()}**", 
-                    line
-                )
+                # Highlight match in line
+                highlighted_line = pattern["regex"].sub(r"**\g<0>**", line_clean)
 
-                findings.append(ContractFinding(
-                    line=line_num,
-                    matched_text=highlighted,
-                    full_context=context,
-                    issue=pattern["issue"],
-                    risk=pattern["risk"],
-                    suggestion=pattern["suggestion"],
-                    pattern_used=pattern["regex"]
-                ))
+                findings.append({
+                    "line": i + 1,
+                    "matched_text": highlighted_line,
+                    "full_context": context,
+                    "issue": pattern["issue"],
+                    "risk": pattern["risk"],
+                    "suggestion": pattern["suggestion"]
+                })
 
-    # Sort findings by line number
-    findings.sort(key=lambda x: x.line)
-    
     return findings
-def clean_text_for_pdf(text: str, replace_newlines: bool = True) -> str:
-    """
-    Clean text for PDF generation by:
-    - Replacing unsupported/unwanted Unicode characters
-    - Handling whitespace and line breaks
-    - Removing control characters
-    - Optionally preserving or replacing newlines
 
-    Args:
-        text: Input text to clean
-        replace_newlines: If True, replaces newlines with spaces (good for paragraphs).
-                         If False, preserves newlines (good for preformatted text).
-
-    Returns:
-        Cleaned text suitable for PDF generation
-    """
+def clean_text_for_pdf(text: str) -> str:
     if not text:
         return ""
-
-    # Common Unicode replacements
+    # Replace em dash and other unsupported characters
     replacements = {
-        # Dashes and quotes
-        "—": "--",   # em dash
-        "–": "-",    # en dash
-        "―": "--",   # horizontal bar
-        "’": "'",    # curly apostrophe
-        "‘": "'",    # left single quote
-        "“": '"',    # left double quote
-        "”": '"',    # right double quote
-        "…": "...",  # ellipsis
-        "•": "*",    # bullet point
-        "·": "*",    # middle dot
-        "®": "(R)",  # registered trademark
-        "©": "(C)",  # copyright
-        "™": "(TM)", # trademark
-        "°": " deg", # degree symbol
-        "±": "+/-",  # plus-minus
-        "×": "x",    # multiplication sign
-        "÷": "/",    # division sign
-        "¼": "1/4",
-        "½": "1/2",
-        "¾": "3/4",
+        "—": "--",
+        "–": "-",  # en dash
+        "’": "'",  # curly apostrophe
+        "“": '"',
+        "”": '"',
+        # add more as needed
     }
-
-    # Replace Unicode characters
     for k, v in replacements.items():
         text = text.replace(k, v)
-
-    # Handle whitespace
-    text = " ".join(text.split())  # Remove extra whitespace between words
-
-    # Handle newlines based on parameter
-    if replace_newlines:
-        text = text.replace("\n", " ").replace("\r", " ")
-    else:
-        text = text.replace("\r\n", "\n").replace("\r", "\n")  # Normalize line endings
-
-    # Remove control characters (except basic whitespace)
-    text = "".join(
-        char for char in text 
-        if char == "\n" or char.isprintable()
-    )
-
-    # Final cleanup of any remaining special cases
-    text = re.sub(r"[\x00-\x1F\x7F-\x9F]", "", text)  # Remove non-printable chars
-    text = text.strip()
-
     return text
 
-def generate_report_pdf(summary: str, findings: List[Dict], company_name: str = None) -> bytes:
-    """
-    Generate a professional PDF report from contract analysis results.
-    
-    Args:
-        summary: Executive summary of the analysis
-        findings: List of risk findings (each containing issue, risk, suggestion)
-        company_name: Optional company name for report header
-    
-    Returns:
-        PDF file as bytes
-    """
+
+def generate_report_pdf(summary: str, findings: list):
     from fpdf import FPDF
     from datetime import datetime
-    from typing import List, Dict
 
-    class ContractPDF(FPDF):
-        def __init__(self):
-            super().__init__()
-            self.set_auto_page_break(auto=True, margin=15)
-            self.set_margins(left=15, top=15, right=15)
-            self.company_name = company_name
-            self.add_font('DejaVu', '', 'DejaVuSans.ttf', uni=True)
-            self.add_font('DejaVu', 'B', 'DejaVuSans-Bold.ttf', uni=True)
-            self.add_font('DejaVu', 'I', 'DejaVuSans-Oblique.ttf', uni=True)
-
+    class PDF(FPDF):
         def header(self):
-            self.set_font('DejaVu', 'B', 16)
-            title = 'LegalEase AI — Contract Analysis Report'
-            if self.company_name:
-                title += f"\nfor {self.company_name}"
-            self.cell(0, 10, title, ln=True, align='C')
-            self.ln(5)
-            self.set_draw_color(200, 200, 200)
-            self.line(10, self.get_y(), 200, self.get_y())
+            self.set_font('Helvetica', 'B', 16)
+            self.cell(0, 10, 'LegalEase AI — Contract Analysis Report', ln=True, align='C')
             self.ln(10)
 
         def footer(self):
             self.set_y(-15)
-            self.set_font('DejaVu', 'I', 8)
-            self.cell(0, 10, f'Page {self.page_no()} | Generated on {datetime.now().strftime("%Y-%m-%d %H:%M")}', 0, 0, 'C')
-            self.set_y(-12)
-            self.set_font('DejaVu', 'I', 6)
-            self.cell(0, 10, 'AI-Generated Analysis - Not Legal Advice', 0, 0, 'C')
+            self.set_font('Helvetica', 'I', 8)
+            self.cell(0, 10, f'Generated on {datetime.now().strftime("%Y-%m-%d %H:%M")} | Not Legal Advice', align='C')
 
-        def add_section(self, title, content, style='B'):
-            self.set_font('DejaVu', style, 12)
-            self.set_text_color(0, 0, 139)  # Dark blue
-            self.cell(0, 8, title, ln=True)
-            self.set_text_color(0, 0, 0)  # Black
-            self.set_font('DejaVu', '', 10)
-            self.multi_cell(0, 5, content)
-            self.ln(5)
+        def add_section(self, title, content):
+            self.set_font('Helvetica', 'B', 14)
+            self.cell(0, 10, title, ln=True)
+            self.set_font('Helvetica', '', 12)
+            self.multi_cell(0, 6, content)
+            self.ln(8)
 
         def add_risk_table(self, findings):
             if not findings:
-                self.set_font('DejaVu', 'I', 10)
-                self.cell(0, 8, 'No significant risks detected.', ln=True)
+                self.set_font('Helvetica', 'I', 12)
+                self.cell(0, 10, 'No risks detected.', ln=True)
                 self.ln(8)
                 return
 
-            self.set_font('DejaVu', 'B', 12)
-            self.set_text_color(0, 0, 139)  # Dark blue
-            self.cell(0, 8, 'Risk Analysis Findings', ln=True)
-            self.ln(2)
-            
-            # Table header
-            self.set_fill_color(220, 220, 250)
-            self.set_font('DejaVu', 'B', 9)
-            self.set_text_color(0, 0, 0)
-            self.cell(15, 6, 'Line', 1, 0, 'C', 1)
-            self.cell(60, 6, 'Issue', 1, 0, 'C', 1)
-            self.cell(20, 6, 'Risk', 1, 0, 'C', 1)
-            self.cell(90, 6, 'Recommendation', 1, 1, 'C', 1)
+            self.set_font('Helvetica', 'B', 14)
+            self.cell(0, 10, 'Detected Risks', ln=True)
+            self.set_font('Helvetica', 'B', 10)
+            self.set_fill_color(220, 220, 220)
+            self.cell(80, 8, 'Issue', 1, 0, 'C', 1)
+            self.cell(30, 8, 'Risk', 1, 0, 'C', 1)
+            self.cell(80, 8, 'Suggestion', 1, 1, 'C', 1)
 
-            # Table rows
-            self.set_font('DejaVu', '', 8)
-            for idx, f in enumerate(findings):
-                # Alternate row colors
-                fill = 240 if idx % 2 == 0 else 255
-                self.set_fill_color(255, 255, 255)
-                
-                # Risk level colors
-                if f["risk"].lower() == "high":
-                    self.set_text_color(178, 34, 34)  # Firebrick red
-                elif f["risk"].lower() == "medium":
-                    self.set_text_color(218, 165, 32)  # Goldenrod
-                else:
-                    self.set_text_color(0, 100, 0)  # Dark green
-                
-                self.cell(15, 6, str(f.get("line", "")), 1, 0, 'C', fill)
-                self.set_text_color(0, 0, 0)  # Reset to black for other cells
-                self.cell(60, 6, f["issue"], 1, 0, 'L', fill)
-                self.set_font('DejaVu', 'B', 8)
-                self.cell(20, 6, f["risk"].upper(), 1, 0, 'C', fill)
-                self.set_font('DejaVu', '', 8)
-                self.multi_cell(90, 6, f["suggestion"], 1, 1, 'L', fill)
-            
+            self.set_font('Helvetica', '', 9)
+            for f in findings:
+                c = (255, 180, 180) if f["risk"] == "high" else (255, 240, 180)
+                self.set_fill_color(*c)
+                self.cell(80, 6, f["issue"], 1, 0, 'L', 1)
+                self.cell(30, 6, f["risk"].upper(), 1, 0, 'C', 1)
+                self.cell(80, 6, (f["suggestion"][:60] + "...") if len(f["suggestion"]) > 60 else f["suggestion"], 1, 1, 'L', 1)
             self.ln(10)
 
-    try:
-        pdf = ContractPDF()
-        pdf.add_page()
-        
-        # Cover page
-        pdf.set_font('DejaVu', 'B', 20)
-        pdf.cell(0, 40, '', ln=True)  # Spacer
-        pdf.cell(0, 15, 'Contract Analysis Report', ln=True, align='C')
-        if company_name:
-            pdf.set_font('DejaVu', 'I', 14)
-            pdf.cell(0, 10, f'Prepared for {company_name}', ln=True, align='C')
-        pdf.set_font('DejaVu', '', 12)
-        pdf.cell(0, 10, datetime.now().strftime('%B %d, %Y'), ln=True, align='C')
-        
-        # Content pages
-        pdf.add_page()
-        pdf.add_section("Executive Summary", summary)
-        
-        if findings:
-            pdf.add_section("Detailed Findings", 
-                          "The following table summarizes potential risks identified in the contract:")
-            pdf.add_risk_table(findings)
-        else:
-            pdf.add_section("Analysis Results", 
-                          "No significant risks were identified in the contract document.")
-        
-        # Disclaimer section
-        pdf.set_font('DejaVu', 'I', 9)
-        pdf.set_text_color(139, 0, 0)  # Dark red
-        pdf.multi_cell(0, 5, 
-                      "DISCLAIMER: This automated contract analysis report is generated by LegalEase AI and "
-                      "is provided for informational purposes only. It does not constitute legal advice. "
-                      "Please consult with qualified legal counsel before making any decisions based on this analysis.")
-        
-        return pdf.output(dest='S').encode('latin-1')
-    
-    except Exception as e:
-        error_pdf = FPDF()
-        error_pdf.add_page()
-        error_pdf.set_font('Arial', 'B', 12)
-        error_pdf.cell(0, 10, 'Report Generation Failed', ln=True, align='C')
-        error_pdf.set_font('Arial', '', 10)
-        error_pdf.multi_cell(0, 6, f"An error occurred while generating the PDF report:\n{str(e)}")
-        return error_pdf.output(dest='S').encode('latin-1')# -----------------------------
+    pdf = PDF()
+    pdf.add_page()
+    pdf.add_section("Document Summary", summary)
+    pdf.add_risk_table(findings)
+    pdf.set_font('Helvetica', 'I', 10)
+    pdf.set_text_color(150, 0, 0)
+    pdf.multi_cell(0, 6, "⚠️ DISCLAIMER: This report is AI-generated and not legal advice. Consult a licensed attorney.")
+
+    # Return PDF file as bytes (no double encode)
+    return pdf.output(dest='S').encode('latin-1')
+
+# -----------------------------
+# UI
+# -----------------------------
 
 # -----------------------------
 # Page Config
@@ -435,281 +225,158 @@ def generate_report_pdf(summary: str, findings: List[Dict], company_name: str = 
 st.set_page_config(
     page_title="LegalEase AI",
     layout="wide",
-    page_icon="⚖️",
-    initial_sidebar_state="expanded"
+    page_icon="⚖️"
 )
 
 # -----------------------------
-# Theme Configuration
+# Sidebar: Theme Toggle First
 # -----------------------------
-def apply_theme(theme):
-    """Apply theme-specific CSS styles"""
-    if theme == "🌙 Dark":
-        st.markdown("""
-            <style>
-                :root {
-                    --primary: #1f2229;
-                    --secondary: #2a2a3a;
-                    --text: #fafafa;
-                    --accent: #4e8cff;
-                    --user-bg: #1a3a4a;
-                    --assistant-bg: #2a2a3a;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-            <style>
-                :root {
-                    --primary: #f5f5f5;
-                    --secondary: #f0f0f0;
-                    --text: #000000;
-                    --accent: #0068c9;
-                    --user-bg: #e6f2ff;
-                    --assistant-bg: #f0f0f0;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-    
-    # Shared CSS styles
-    st.markdown(f"""
+with st.sidebar:
+    st.markdown("## 🌓 Theme Mode")
+    theme = st.radio("Choose Theme", ["🌞 Light", "🌙 Dark"], key="theme_mode")
+
+# -----------------------------
+# Theme CSS Injection
+# -----------------------------
+if theme == "🌙 Dark":
+    st.markdown("""
         <style>
-            body, .stApp {{
-                background-color: var(--primary);
-                color: var(--text);
-            }}
-            .stButton>button, .stDownloadButton>button {{
-                background-color: var(--accent);
+            body, .stApp {
+                background-color: #0e1117;
+                color: #fafafa;
+            }
+            .stButton>button, .stDownloadButton>button {
+                background-color: #1f2229;
                 color: white;
                 border-radius: 8px;
                 padding: 0.5em 1em;
-                border: none;
-                transition: all 0.3s;
-            }}
-            .stButton>button:hover {{
-                opacity: 0.8;
-                transform: scale(1.02);
-            }}
-            .stTextInput>div>div>input {{
-                background-color: var(--primary);
-                color: var(--text);
+            }
+            .stTextInput>div>input {
+                background-color: #1f2229;
+                color: white;
+                border-radius: 5px;
+            }
+            .chat-message-user {
+                background-color: #1a3a4a !important;
+                padding: 1em;
+                border-radius: 10px;
+                color: #fafafa !important;
+            }
+            .chat-message-assistant {
+                background-color: #2a2a3a !important;
+                padding: 1em;
+                border-radius: 10px;
+                color: #fafafa !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+        <style>
+            body, .stApp {
+                background-color: #ffffff;
+                color: #000000;
+            }
+            .stMarkdown, .stText, .stHeading, .stCaption, .stDataFrame {
+                color: #000000 !important;
+            }
+            .stButton>button, .stDownloadButton>button {
+                background-color: #f5f5f5;
+                color: #000000;
                 border-radius: 8px;
-                border: 1px solid var(--accent);
-            }}
-            .chat-message-user {{
-                background-color: var(--user-bg) !important;
+                padding: 0.5em 1em;
+            }
+            .stTextInput>div>input {
+                background-color: #ffffff;
+                color: #000000;
+                border-radius: 5px;
+            }
+            .chat-message-user {
+                background-color: #e6f2ff !important;
                 padding: 1em;
                 border-radius: 10px;
-                margin: 0.5em 0;
-                color: var(--text) !important;
-            }}
-            .chat-message-assistant {{
-                background-color: var(--assistant-bg) !important;
+                color: #000000 !important;
+            }
+            .chat-message-assistant {
+                background-color: #f0f0f0 !important;
                 padding: 1em;
                 border-radius: 10px;
-                margin: 0.5em 0;
-                color: var(--text) !important;
-            }}
-            .stTabs [data-baseweb="tab-list"] {{
-                gap: 0.5rem;
-            }}
-            .stTabs [data-baseweb="tab"] {{
-                padding: 0.5rem 1rem;
-                border-radius: 8px !important;
-                transition: all 0.3s;
-            }}
-            .stTabs [aria-selected="true"] {{
-                background-color: var(--accent);
-                color: white !important;
-            }}
-            .stMarkdown h1 {{
-                margin-bottom: 0.5rem;
-            }}
-            .disclaimer {{
-                font-size: 0.8rem;
-                color: #ff4b4b !important;
-                margin-top: 0.5rem;
-            }}
+                color: #000000 !important;
+            }
         </style>
     """, unsafe_allow_html=True)
 
 # -----------------------------
-# Sidebar Configuration
+# Header Section
+# -----------------------------
+st.markdown("<h1 style='font-size: 2.5em;'>💼 LegalEase AI</h1>", unsafe_allow_html=True)
+st.markdown("#### Empowering Ethiopian Legal Access Through AI")
+st.caption("⚠️ This tool does not provide legal advice. Always consult a licensed attorney.")
+st.markdown("---")
+
+# -----------------------------
+# Sidebar: Settings
 # -----------------------------
 with st.sidebar:
-    # Theme Selector
-    st.markdown("## 🌓 Display Settings")
-    theme = st.radio("Color Theme", ["🌞 Light", "🌙 Dark"], key="theme_mode", horizontal=True)
-    apply_theme(theme)
-    
-    # App Settings
-    st.markdown("## ⚙️ Configuration")
-    debug_mode = st.checkbox("🛠️ Debug Mode", help="Enable detailed logging")
-    language = st.selectbox("🌍 Language", ["English", "Amharic", "Oromo"])
-    
-    # AI Settings
-    st.markdown("## 🤖 AI Preferences")
+    st.markdown("## ⚙️ App Settings")
+    st.checkbox("🛠️ Debug Mode", key="debug_mode")
+
+    st.markdown("## 🤖 Chatbot Preferences")
     chatbot_mode = st.selectbox(
-        "Assistant Mode",
+        "AI Mode",
         ["General Legal", "Contract Analysis", "Document Review"],
-        help="Specialize the AI's responses"
+        help="Choose the AI assistant's focus"
     )
-    
+
     chatbot_tone = st.select_slider(
-        "Response Style",
-        options=["Technical", "Balanced", "Simple"],
+        "Tone of Responses",
+        options=["Formal", "Balanced", "Simple"],
         value="Balanced"
     )
-    
-    # Legal Resources
-    st.markdown("---")
-    st.markdown("## 📚 Legal Resources")
-    with st.expander("Ethiopian Legal Documents"):
-        st.markdown("- [Civil Code](https://chilot.me)")
-        st.markdown("- [Commercial Code](https://chilot.me)")
-        st.markdown("- [Constitution](https://chilot.me)")
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("### About LegalEase")
-    st.caption("v1.0.0 | Made with ❤️ in Ethiopia")
-    
-# -----------------------------
-# Main Page Layout
-# -----------------------------
-st.markdown("""
-    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-        <h1 style="margin: 0;">💼 LegalEase AI</h1>
-        <span style="font-size: 0.8rem; background: #4e8cff; color: white; padding: 0.2rem 0.5rem; border-radius: 1rem;">BETA</span>
-    </div>
-""", unsafe_allow_html=True)
 
-st.markdown("#### Democratizing Legal Access Through AI Technology")
-st.markdown('<p class="disclaimer">⚠️ Disclaimer: AI-generated content. Not a substitute for professional legal advice.</p>', unsafe_allow_html=True)
-st.markdown("---")
+    st.markdown("---")
+    st.markdown("### 📚 Legal Resources")
+    st.markdown("- [Ethiopian Civil Code](https://chilot.me)")
+    st.markdown("- [Contract Law Guidelines](https://chilot.me)")
+    st.markdown("- [Legal Aid Services](https://ethiopianlaw.org)")
 
 # -----------------------------
 # Main Tabs
 # -----------------------------
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🗨️ Smart Chat", 
-    "📄 Document Tools",
-    "🔍 Risk Analyzer",
-    "⚖️ Legal Resources"
+    "🗨️ Smart Chat",
+    "📄 Summarize Document",
+    "🔍 Analyze Legal Risks",
+    "📚 Extract Contract Clauses"
 ])
 
-with tab1:
-    st.markdown("### 💬 Chat with LegalEase AI")
-    st.caption("Ask general legal questions or about specific cases")
-    
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-    
-    if prompt := st.chat_input("Ask your legal question..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        # Placeholder for AI response
-        with st.chat_message("assistant"):
-            response = f"AI response to: {prompt}"
-            st.markdown(response)
-        st.session_state.messages.append({"role": "assistant", "content": response})
-
-with tab2:
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### 📝 Document Summarizer")
-        uploaded_file = st.file_uploader("Upload legal document", type=["pdf", "docx", "txt"])
-        if uploaded_file:
-            if st.button("Generate Summary"):
-                with st.spinner("Analyzing document..."):
-                    # Placeholder for summary logic
-                    st.success("Summary generated!")
-                    st.markdown("**Document Summary:**")
-                    st.write("This would be the AI-generated summary of the uploaded document.")
-    
-    with col2:
-        st.markdown("### ✍️ Clause Extractor")
-        st.caption("Identify specific clauses in contracts")
-        if uploaded_file and st.button("Extract Clauses"):
-            with st.spinner("Processing clauses..."):
-                # Placeholder for clause extraction
-                st.success("Clauses extracted!")
-                with st.expander("View Extracted Clauses"):
-                    st.write("1. **Termination Clause** (Page 3)")
-                    st.write("2. **Liability Clause** (Page 5)")
-
-with tab3:
-    st.markdown("### 🔍 Contract Risk Analyzer")
-    risk_file = st.file_uploader("Upload contract for analysis", type=["pdf", "docx"])
-    
-    if risk_file:
-        if st.button("Analyze Risks", type="primary"):
-            with st.spinner("Scanning for legal risks..."):
-                # Placeholder for risk analysis
-                st.success("Analysis complete!")
-                
-                col1, col2 = st.columns([1, 3])
-                with col1:
-                    st.metric("High Risks", 3)
-                    st.metric("Medium Risks", 2)
-                    st.metric("Low Risks", 1)
-                
-                with col2:
-                    with st.expander("🔴 High Risk: Unlimited Liability", expanded=True):
-                        st.markdown("**Found on:** Page 4, Section 2.3")
-                        st.markdown("**Recommendation:** Cap liability to contract value")
-                    
-                    with st.expander("🟠 Medium Risk: Automatic Renewal"):
-                        st.markdown("**Found on:** Page 2, Section 1.5")
-                        st.markdown("**Recommendation:** Add 30-day notice period")
-
-with tab4:
-    st.markdown("### ⚖️ Ethiopian Legal Resources")
-    
-    with st.container():
-        st.markdown("#### 📜 Primary Legislation")
-        cols = st.columns(3)
-        with cols[0]:
-            st.markdown("**Civil Code**")
-            st.caption("Proclamation No. 123/2021")
-            st.download_button("Download PDF", "#")
-        with cols[1]:
-            st.markdown("**Commercial Code**")
-            st.caption("Proclamation No. 124/2021")
-            st.download_button("Download PDF", "#")
-        with cols[2]:
-            st.markdown("**Labor Law**")
-            st.caption("Proclamation No. 1156/2019")
-            st.download_button("Download PDF", "#")
-    
-    st.markdown("---")
-    st.markdown("#### 🏛️ Government Portals")
-    st.markdown("- [Federal Supreme Court](https://supremecourt.gov.et)")
-    st.markdown("- [Ministry of Justice](https://moj.gov.et)")
-    st.markdown("- [Ethiopian Law Archive](https://lawethiopia.com)")
-
-# -----------------------------
-# Responsive Adjustments
-# -----------------------------
+# Optional spacing cleanup
 st.markdown("""
     <style>
-        @media screen and (max-width: 768px) {
-            .stTabs [data-baseweb="tab-list"] {
-                flex-direction: column;
-            }
-            .stTabs [data-baseweb="tab"] {
-                width: 100%;
-                margin-bottom: 0.5rem;
-            }
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
         }
     </style>
-""", unsafe_allow_html=True)# -----------------------------
+""", unsafe_allow_html=True)
+
+# -----------------------------
+# You can now build logic into each tab
+# Example placeholder for now
+# -----------------------------
+with tab1:
+    st.write("🤖 Chat with LegalEase AI")
+
+with tab2:
+    st.write("📄 Upload a document to summarize")
+
+with tab3:
+    st.write("🧐 Get AI insights on potential legal risks")
+
+with tab4:
+    st.write("📚 Extract clauses from legal documents")
+
+# -----------------------------
 # TAB 1: Enhanced Chatbot
 # -----------------------------
 
