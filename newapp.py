@@ -18,10 +18,8 @@ except ImportError as e:
     st.warning(f"Some optional dependencies missing: {e}. Install with: pip install pymupdf pillow python-docx pytesseract")
 
 # -----------------------------
-# Configuration & Utilities
+# API Key Management
 # -----------------------------
-
-# Add this near the top of your combined code, before the main app logic
 
 def get_openai_api_key():
     """Get OpenAI API key from user input or existing session."""
@@ -35,7 +33,8 @@ def get_openai_api_key():
         api_key = st.text_input(
             "Enter your OpenAI API key:",
             type="password",
-            help="Get your API key from https://platform.openai.com/account/api-keys"
+            help="Get your API key from https://platform.openai.com/account/api-keys",
+            key="api_key_input"
         )
         
         if api_key:
@@ -46,15 +45,43 @@ def get_openai_api_key():
             st.warning("Please enter your OpenAI API key to use the AI features")
             return None
 
-# Then modify the ensure_openai_api_key function to use this:
 def ensure_openai_api_key():
     """Set the OpenAI API key from user input."""
+    # First try to get from secrets/env (for deployed versions)
+    if st.secrets and hasattr(st.secrets, "OPENAI_API_KEY"):
+        openai.api_key = st.secrets.OPENAI_API_KEY
+        return
+    if os.getenv("OPENAI_API_KEY"):
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        return
+    
+    # Fall back to user input
     api_key = get_openai_api_key()
     if api_key:
         openai.api_key = api_key
     else:
         st.error("OpenAI API key is required")
         st.stop()
+
+# -----------------------------
+# Rest of your existing code...
+# (All the DocumentProcessor, TextProcessor, AIServices, etc. classes)
+# -----------------------------
+
+class UIComponents:
+    # ... existing code ...
+    
+    @staticmethod
+    def setup_sidebar():
+        """Render the sidebar with settings and options."""
+        with st.sidebar:
+            # API Key section first
+            ensure_openai_api_key()  # This will show the input if needed
+            
+            st.title("⚙️ LegalEase AI Settings")
+            
+            # Rest of your existing sidebar content...
+            theme = st.radio("🌓 Theme Mode", ["🌞 Light", "🌙 Dark"], key="theme_mode")
 # -----------------------------
 # Document Processing
 # -----------------------------
