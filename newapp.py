@@ -21,20 +21,40 @@ except ImportError as e:
 # Configuration & Utilities
 # -----------------------------
 
+# Add this near the top of your combined code, before the main app logic
+
+def get_openai_api_key():
+    """Get OpenAI API key from user input or existing session."""
+    # Check if already in session
+    if 'openai_api_key' in st.session_state and st.session_state.openai_api_key:
+        return st.session_state.openai_api_key
+    
+    # Show API key input in sidebar
+    with st.sidebar:
+        st.markdown("## 🔑 OpenAI API Key")
+        api_key = st.text_input(
+            "Enter your OpenAI API key:",
+            type="password",
+            help="Get your API key from https://platform.openai.com/account/api-keys"
+        )
+        
+        if api_key:
+            st.session_state.openai_api_key = api_key
+            st.success("✅ API key saved for this session")
+            return api_key
+        else:
+            st.warning("Please enter your OpenAI API key to use the AI features")
+            return None
+
+# Then modify the ensure_openai_api_key function to use this:
 def ensure_openai_api_key():
-    """Get OpenAI API key from Streamlit secrets or environment variable."""
-    key = None
-    if st.secrets and hasattr(st.secrets, "OPENAI_API_KEY"):
-        key = st.secrets.OPENAI_API_KEY
+    """Set the OpenAI API key from user input."""
+    api_key = get_openai_api_key()
+    if api_key:
+        openai.api_key = api_key
     else:
-        key = os.getenv("OPENAI_API_KEY")
-    if not key:
-        st.error("OpenAI API key not found. Add OPENAI_API_KEY to Streamlit secrets or environment variables.")
+        st.error("OpenAI API key is required")
         st.stop()
-    openai.api_key = key
-
-ensure_openai_api_key()
-
 # -----------------------------
 # Document Processing
 # -----------------------------
