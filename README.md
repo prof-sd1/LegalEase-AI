@@ -1,4 +1,4 @@
-# 💼 LegalEase AI — Your Legal Assistant Powered by AI
+# *💼 LegalEase AI — Your Legal Assistant Powered by AI*
 
 > A conversational AI assistant for Ethiopian legal queries, document summarization, and contract risk analysis.
 
