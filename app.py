@@ -1,7 +1,7 @@
 import streamlit as st
 from io import BytesIO
 from PIL import Image
-import fitz  # PyMuPDF
+import fitz  
 from docx import Document
 import pytesseract
 import numpy as np
@@ -72,7 +72,7 @@ def analyze_contract_text(text: str, context_lines: int = 1) -> List[Dict]:
     highlight matched phrases, include context, and avoid duplicates.
 
     Args:
-        text (str): The contract text to analyze.
+        text (str): The contract text to analyze...
         context_lines (int): Number of lines before and after a match to include as context.
 
     Returns:
